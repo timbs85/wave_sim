@@ -22,12 +22,12 @@ function setup() {
         simulation.triggerImpulse();
     });
 
-    // Add absorption slider
-    createSpan('Wall Absorption: ').position(10, buttonY);
+    // Add decay rate slider
+    createSpan('Decay Rate: ').position(10, buttonY);
     let absorptionSlider = createSlider(0, 100, 10);
     absorptionSlider.position(120, buttonY);
     absorptionSlider.input(() => {
-        simulation.setAbsorption(absorptionSlider.value() / 100);
+        simulation.setDecayRate(absorptionSlider.value() / 100);
     });
 
     // Add frequency slider
@@ -74,19 +74,20 @@ function setup() {
 function getPressureColor(pressure) {
     const intensity = map(pressure, -0.5, 0.5, 0, 1);
     if (colorMode === 'pressure') {
+        // Improved color mapping for pressure visualization
         if (intensity > 0.5) {
-            // Red for positive pressure
+            // Pure red for positive pressure (no blue blending)
             return color(
-                map(intensity, 0.5, 1, 0, 255),
-                0,
-                map(intensity, 0.5, 1, 0, 64)
+                map(intensity, 0.5, 1, 0, 255), // Red
+                0,                              // Green
+                0                               // Blue
             );
         } else {
-            // Blue for negative pressure
+            // Pure blue for negative pressure (no red blending)
             return color(
-                map(intensity, 0, 0.5, 0, 64),
-                0,
-                map(intensity, 0, 0.5, 255, 0)
+                0,                              // Red
+                0,                              // Green
+                map(intensity, 0, 0.5, 255, 0)  // Blue
             );
         }
     } else {
