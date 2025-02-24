@@ -167,8 +167,17 @@ function draw() {
     noStroke();
     for (let i = 0; i < simulation.cols; i++) {
         for (let j = 0; j < simulation.rows; j++) {
-            const pressure = simulation.getPressure(i * simResolution, j * simResolution);
-            fill(getPressureColor(pressure));
+            const idx = i + j * simulation.cols;
+
+            if (simulation.walls[idx] === 1) {
+                // Draw walls in gray
+                fill(100);
+            } else {
+                // Draw pressure field
+                const pressure = simulation.getPressure(i * simResolution, j * simResolution);
+                fill(getPressureColor(pressure));
+            }
+
             rect(
                 i * simResolution,
                 j * simResolution,
