@@ -155,6 +155,7 @@ function draw() {
     // Update simulation if not paused
     if (!paused) {
         simulation.update();
+        simulation.updateWarning();
     }
 
     // Update source position on mouse click
@@ -188,4 +189,33 @@ function draw() {
         simResolution * 0.8,  // Make circle size relative to cell size
         simResolution * 0.8
     );
+
+    // Draw warning message if exists
+    if (simulation.warningMessage) {
+        // Set up warning message style
+        textAlign(CENTER);
+        textSize(16);
+        const padding = 10;
+        const messageWidth = textWidth(simulation.warningMessage.text) + padding * 2;
+        const messageHeight = 30;
+
+        // Draw warning background in center of screen
+        fill(255, 50, 50, 200);  // Semi-transparent red
+        noStroke();
+        rect(
+            (width - messageWidth) / 2,
+            (height - messageHeight) / 2,
+            messageWidth,
+            messageHeight,
+            5  // Rounded corners
+        );
+
+        // Draw warning text
+        fill(255);  // White text
+        text(
+            simulation.warningMessage.text,
+            width / 2,
+            height / 2
+        );
+    }
 } 

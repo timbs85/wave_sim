@@ -50,12 +50,43 @@ class WaveSimulation {
                 this.neighborIndices[baseIdx + 4] = idx + this.cols;  // Down
             }
         }
+
+        // Add warning message state
+        this.warningMessage = null;
     }
 
     setSource(x, y) {
-        // Convert pixel coordinates to grid coordinates, centering on the clicked cell
-        this.sourceX = Math.floor(x / this.cellSize + 0.5);
-        this.sourceY = Math.floor(y / this.cellSize + 0.5);
+        const newSourceX = Math.floor(x / this.cellSize + 0.5);
+        const newSourceY = Math.floor(y / this.cellSize + 0.5);
+
+        // Calculate wavelength in grid cells
+        const wavelengthMeters = this.c / this.frequency;
+        const wavelengthCells = wavelengthMeters / this.dx;
+
+        // Check minimum distance from boundaries
+        const distanceFromLeft = newSourceX;
+        const distanceFromRight = this.cols - newSourceX;
+        const distanceFromTop = newSourceY;
+        const distanceFromBottom = this.rows - newSourceY;
+
+        const minDistance = Math.min(
+            distanceFromLeft,
+            distanceFromRight,
+            distanceFromTop,
+            distanceFromBottom
+        );
+
+        if (minDistance < wavelengthCells) {
+            this.warningMessage = {
+                text: `Source too close to boundary! Distance: ${minDistance.toFixed(1)} cells, Wavelength: ${wavelengthCells.toFixed(1)} cells`,
+                timeLeft: 5 // Show for 5 seconds
+            };
+        } else {
+            this.warningMessage = null;
+        }
+
+        this.sourceX = newSourceX;
+        this.sourceY = newSourceY;
     }
 
     setAirAbsorption(value) {
@@ -73,6 +104,33 @@ class WaveSimulation {
 
     setFrequency(freq) {
         this.frequency = freq;
+
+        // Check if source position is still valid with new frequency
+        if (this.sourceX !== undefined && this.sourceY !== undefined) {
+            const wavelengthMeters = this.c / this.frequency;
+            const wavelengthCells = wavelengthMeters / this.dx;
+
+            const distanceFromLeft = this.sourceX;
+            const distanceFromRight = this.cols - this.sourceX;
+            const distanceFromTop = this.sourceY;
+            const distanceFromBottom = this.rows - this.sourceY;
+
+            const minDistance = Math.min(
+                distanceFromLeft,
+                distanceFromRight,
+                distanceFromTop,
+                distanceFromBottom
+            );
+
+            if (minDistance < wavelengthCells) {
+                this.warningMessage = {
+                    text: `Source too close to boundary! Distance: ${minDistance.toFixed(1)} cells, Wavelength: ${wavelengthCells.toFixed(1)} cells`,
+                    timeLeft: 5
+                };
+            } else {
+                this.warningMessage = null;
+            }
+        }
     }
 
     triggerImpulse() {
@@ -164,5 +222,15 @@ class WaveSimulation {
             return this.pressure[i + j * this.cols];
         }
         return 0;
+    }
+
+    // Add this method to update warning timer
+    updateWarning() {
+        if (this.warningMessage && this.warningMessage.timeLeft > 0) {
+            this.warningMessage.timeLeft -= this.dt;
+            if (this.warningMessage.timeLeft <= 0) {
+                this.warningMessage = null;
+            }
+        }
     }
 } 
