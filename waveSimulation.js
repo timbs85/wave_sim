@@ -19,10 +19,9 @@ class WaveSimulation {
         this.dx = 0.1; // Grid spacing in meters
         this.dt = (this.dx / (this.c * Math.sqrt(2))) * 0.5; // Time step (CFL condition)
 
-        // Decay parameters
-        this.wallAbsorption = 0.1; // How much energy is lost at walls (0 = full reflection, 1 = full absorption)
-        this.globalDecay = 0.99; // Base global decay
-        this.boundaryWidth = 4; // Width of boundary absorption region
+        // Medium and boundary parameters
+        this.wallAbsorption = 0.1; // Wall absorption coefficient (0 = full reflection, 1 = full absorption)
+        this.airAbsorption = 0.001; // Air absorption coefficient (higher = more absorption per meter)
 
         // Source parameters
         this.sourceX = Math.floor(this.cols / 2);
@@ -54,16 +53,22 @@ class WaveSimulation {
     }
 
     setSource(x, y) {
-        this.sourceX = Math.floor(x / this.cellSize);
-        this.sourceY = Math.floor(y / this.cellSize);
+        // Convert pixel coordinates to grid coordinates, centering on the clicked cell
+        this.sourceX = Math.floor(x / this.cellSize + 0.5);
+        this.sourceY = Math.floor(y / this.cellSize + 0.5);
     }
 
-    setDecayRate(value) {
-        // Scale to make the control more intuitive
-        this.wallAbsorption = Math.max(0, Math.min(1, value));
-        // Adjust global decay based on absorption
-        this.globalDecay = 0.99 - (this.wallAbsorption * 0.01);
-        console.log("Decay rate set to:", this.wallAbsorption, "Global decay:", this.globalDecay);
+    setAirAbsorption(value) {
+        // Convert 0-1 range to appropriate air absorption values
+        // At 0, sound travels far (low absorption)
+        // At 1, sound is quickly absorbed by air
+        this.airAbsorption = value * 0.015; // Scale to reasonable range
+        console.log("Air absorption coefficient:", this.airAbsorption);
+    }
+
+    setWallAbsorption(value) {
+        this.wallAbsorption = value;
+        console.log("Wall absorption coefficient:", this.wallAbsorption);
     }
 
     setFrequency(freq) {
@@ -78,23 +83,9 @@ class WaveSimulation {
         this.newPressure.fill(0);
     }
 
-    // Calculate absorption factor based on distance from walls
-    getAbsorptionFactor(i, j) {
-        const distFromLeft = i;
-        const distFromRight = this.cols - 1 - i;
-        const distFromTop = j;
-        const distFromBottom = this.rows - 1 - j;
-        const minDist = Math.min(distFromLeft, distFromRight, distFromTop, distFromBottom);
-
-        if (minDist < this.boundaryWidth) {
-            // Calculate normalized distance from wall (0 at wall, 1 at boundaryWidth)
-            const normalizedDist = minDist / this.boundaryWidth;
-            // Use exponential falloff for smoother absorption
-            const absorptionStrength = Math.exp(-3 * normalizedDist);
-            // Calculate reflection coefficient (1 = full reflection, 0 = full absorption)
-            return Math.max(0, 1 - (this.wallAbsorption * absorptionStrength));
-        }
-        return 1;
+    // Simplified wall check - returns true if position is at a wall
+    isWall(i, j) {
+        return i === 0 || i === this.cols - 1 || j === 0 || j === this.rows - 1;
     }
 
     update() {
@@ -121,16 +112,17 @@ class WaveSimulation {
                     )
                 );
 
-                // Apply absorption first
-                const absorptionFactor = this.getAbsorptionFactor(i, j);
-                this.newPressure[idx] *= absorptionFactor;
+                // Apply wall absorption if adjacent to a wall
+                if (i === 1 || i === this.cols - 2 || j === 1 || j === this.rows - 2) {
+                    this.newPressure[idx] *= (1 - this.wallAbsorption);
+                }
 
-                // Then apply global decay
-                this.newPressure[idx] *= this.globalDecay;
+                // Apply air absorption
+                this.newPressure[idx] *= (1 - this.airAbsorption);
 
-                // More aggressive small value damping
-                if (Math.abs(this.newPressure[idx]) < 0.01) {
-                    this.newPressure[idx] *= 0.7;
+                // Clean up very small values to prevent perpetual ripples
+                if (Math.abs(this.newPressure[idx]) < 0.001) {
+                    this.newPressure[idx] = 0;
                 }
             }
         }

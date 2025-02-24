@@ -13,35 +13,72 @@ function setup() {
     // Initialize simulation
     simulation = new WaveSimulation(width, height, simResolution);
 
-    // Create control buttons
-    const buttonY = height + 30;
-    const button2Y = height + 60;
-    const button3Y = height + 90;
+    // Layout configuration
+    const margin = 20;
+    const controlWidth = 200;
+    const sliderWidth = 150;
+    const buttonHeight = 30;
+    const spacing = 10;
 
-    createButton('Trigger Impulse').mousePressed(() => {
-        simulation.triggerImpulse();
+    // Create container div for controls
+    let controlsDiv = createDiv('');
+    controlsDiv.style('padding', margin + 'px');
+    controlsDiv.style('background-color', '#f0f0f0');
+    controlsDiv.style('border-radius', '5px');
+    controlsDiv.style('margin-top', '10px');
+    controlsDiv.style('display', 'grid');
+    controlsDiv.style('grid-template-columns', 'repeat(2, 1fr)');
+    controlsDiv.style('gap', '10px');
+    controlsDiv.style('width', width + 'px');
+
+    // Left column controls
+    let leftDiv = createDiv('');
+
+    // Air absorption control
+    let airDiv = createDiv('');
+    createSpan('Air Absorption: ').parent(airDiv);
+    let airSlider = createSlider(0, 100, 20);  // Start with low air absorption
+    airSlider.style('width', sliderWidth + 'px');
+    airSlider.parent(airDiv);
+    airSlider.input(() => {
+        simulation.setAirAbsorption(airSlider.value() / 100);
     });
+    airDiv.parent(leftDiv);
 
-    // Add decay rate slider
-    createSpan('Decay Rate: ').position(10, buttonY);
-    let absorptionSlider = createSlider(0, 100, 10);
-    absorptionSlider.position(120, buttonY);
+    // Wall absorption control
+    let absorbDiv = createDiv('');
+    absorbDiv.style('margin-top', spacing + 'px');
+    createSpan('Wall Absorption: ').parent(absorbDiv);
+    let absorptionSlider = createSlider(0, 100, 30);
+    absorptionSlider.style('width', sliderWidth + 'px');
+    absorptionSlider.parent(absorbDiv);
     absorptionSlider.input(() => {
-        simulation.setDecayRate(absorptionSlider.value() / 100);
+        simulation.setWallAbsorption(absorptionSlider.value() / 100);
     });
+    absorbDiv.parent(leftDiv);
 
-    // Add frequency slider
-    createSpan('Frequency (Hz): ').position(10, button2Y);
+    // Frequency control
+    let freqDiv = createDiv('');
+    freqDiv.style('margin-top', spacing + 'px');
+    createSpan('Frequency (Hz): ').parent(freqDiv);
     let freqSlider = createSlider(20, 1000, 440);
-    freqSlider.position(120, button2Y);
+    freqSlider.style('width', sliderWidth + 'px');
+    freqSlider.parent(freqDiv);
     freqSlider.input(() => {
         simulation.setFrequency(freqSlider.value());
     });
+    freqDiv.parent(leftDiv);
 
-    // Add resolution control
-    createSpan('Resolution: ').position(10, button3Y);
+    leftDiv.parent(controlsDiv);
+
+    // Right column controls
+    let rightDiv = createDiv('');
+
+    // Resolution control
+    let resDiv = createDiv('');
+    createSpan('Resolution: ').parent(resDiv);
     let resolutionSelect = createSelect();
-    resolutionSelect.position(120, button3Y);
+    resolutionSelect.style('width', sliderWidth + 'px');
     resolutionSelect.option('Ultra Fast (32px)', 32);
     resolutionSelect.option('Very Fast (16px)', 16);
     resolutionSelect.option('Fast (8px)', 8);
@@ -52,20 +89,35 @@ function setup() {
         simResolution = parseInt(resolutionSelect.value());
         simulation = new WaveSimulation(width, height, simResolution);
     });
+    resolutionSelect.parent(resDiv);
+    resDiv.parent(rightDiv);
 
-    // Add visualization mode toggle
+    // Button controls
+    let buttonDiv = createDiv('');
+    buttonDiv.style('margin-top', spacing + 'px');
+
+    let triggerButton = createButton('Trigger Impulse');
+    triggerButton.style('margin-right', spacing + 'px');
+    triggerButton.mousePressed(() => {
+        simulation.triggerImpulse();
+    });
+    triggerButton.parent(buttonDiv);
+
     let modeButton = createButton('Toggle Color Mode');
-    modeButton.position(300, buttonY);
+    modeButton.style('margin-right', spacing + 'px');
     modeButton.mousePressed(() => {
         colorMode = colorMode === 'pressure' ? 'intensity' : 'pressure';
     });
+    modeButton.parent(buttonDiv);
 
-    // Add pause button
     let pauseButton = createButton('Pause/Resume');
-    pauseButton.position(300, button2Y);
     pauseButton.mousePressed(() => {
         paused = !paused;
     });
+    pauseButton.parent(buttonDiv);
+
+    buttonDiv.parent(rightDiv);
+    rightDiv.parent(controlsDiv);
 
     // Disable smoothing for sharper visualization
     noSmooth();
@@ -128,10 +180,12 @@ function draw() {
     // Draw source position
     noFill();
     stroke(255, 255, 0);
+    const centerX = (simulation.sourceX + 0.5) * simResolution;
+    const centerY = (simulation.sourceY + 0.5) * simResolution;
     ellipse(
-        simulation.sourceX * simulation.cellSize,
-        simulation.sourceY * simulation.cellSize,
-        10,
-        10
+        centerX,
+        centerY,
+        simResolution * 0.8,  // Make circle size relative to cell size
+        simResolution * 0.8
     );
 } 
