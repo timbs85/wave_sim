@@ -17,76 +17,48 @@ class WaveSource {
         this.warningMessage = null;
     }
 
-    setPosition(x, y, cellSize, walls, speedOfSound) {
-        const newX = Math.floor(x / cellSize + 0.5);
-        const newY = Math.floor(y / cellSize + 0.5);
+    setPosition(x, y, cellSize, walls, c) {
+        const newX = Math.floor(x / cellSize);
+        const newY = Math.floor(y / cellSize);
 
-        if (this._isValidPosition(newX, newY, walls, speedOfSound)) {
-            this.x = newX;
-            this.y = newY;
-            return true;
-        }
-        return false;
-    }
-
-    _isValidPosition(x, y, walls, speedOfSound) {
-        // Check if position is inside walls
-        if (walls[x + y * this.cols] === 1) {
-            this.warningMessage = {
-                text: "Cannot place source inside walls!",
-                timeLeft: 5
-            };
-            return false;
-        }
-
-        // Check distance to nearest wall
-        const wavelengthCells = speedOfSound / (this.frequency * this.dx);
-        const searchRadius = Math.ceil(wavelengthCells);
-        let minDistance = this._findMinWallDistance(x, y, walls, searchRadius);
-
-        if (minDistance < wavelengthCells) {
-            this.warningMessage = {
-                text: `Source too close to wall! Distance: ${minDistance.toFixed(1)} cells, Wavelength: ${wavelengthCells.toFixed(1)} cells`,
-                timeLeft: 5
-            };
-            return false;
-        }
-
-        this.warningMessage = null;
-        return true;
-    }
-
-    _findMinWallDistance(x, y, walls, searchRadius) {
-        let minDistance = Infinity;
-
-        const startX = Math.max(0, x - searchRadius);
-        const endX = Math.min(this.cols, x + searchRadius);
-        const startY = Math.max(0, y - searchRadius);
-        const endY = Math.min(this.rows, y + searchRadius);
-
-        for (let i = startX; i < endX; i++) {
-            for (let j = startY; j < endY; j++) {
-                if (walls[i + j * this.cols] === 1) {
-                    const distance = Math.sqrt((i - x) ** 2 + (j - y) ** 2);
-                    minDistance = Math.min(minDistance, distance);
-                }
+        // Check if new position is valid (not in a wall)
+        if (newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows) {
+            const idx = newX + newY * this.cols;
+            if (!walls[idx]) {
+                this.x = newX;
+                this.y = newY;
+                console.log('Source position set to:', this.x, this.y);
+                return;
             }
         }
-
-        return minDistance;
+        console.log('Invalid source position:', x, y);
     }
 
-    setFrequency(freq, walls, speedOfSound) {
+    setFrequency(freq, walls, c) {
         this.frequency = freq;
-        if (this.x !== undefined && this.y !== undefined) {
-            this._isValidPosition(this.x, this.y, walls, speedOfSound);
+
+        // Calculate wavelength in grid cells
+        const wavelength = c / freq;
+        const wavelengthCells = wavelength / this.dx;
+
+        // Check if wavelength is resolvable on the grid
+        if (wavelengthCells < 8) {
+            this.warningMessage = {
+                text: 'Warning: Frequency too high for grid resolution',
+                timeout: 3
+            };
+        } else {
+            this.warningMessage = null;
         }
+
+        console.log('Source frequency set to:', freq, 'Hz');
     }
 
     trigger() {
         this.isActive = true;
         this.time = 0;
         this.cycleComplete = false;
+        console.log('Source triggered');
     }
 
     updateSource(pressureField, dt) {
@@ -116,23 +88,23 @@ class WaveSource {
     }
 
     _applySourcePressure(pressureField, sourceIdx, sourceValue) {
-        pressureField.current[sourceIdx] += sourceValue;
+        pressureField.pressure[sourceIdx] += sourceValue;
 
         // Add to neighbors for smoother emission
         if (this.x > 0)
-            pressureField.current[sourceIdx - 1] += sourceValue * 0.5;
+            pressureField.pressure[sourceIdx - 1] += sourceValue * 0.5;
         if (this.x < this.cols - 1)
-            pressureField.current[sourceIdx + 1] += sourceValue * 0.5;
+            pressureField.pressure[sourceIdx + 1] += sourceValue * 0.5;
         if (this.y > 0)
-            pressureField.current[sourceIdx - this.cols] += sourceValue * 0.5;
+            pressureField.pressure[sourceIdx - this.cols] += sourceValue * 0.5;
         if (this.y < this.rows - 1)
-            pressureField.current[sourceIdx + this.cols] += sourceValue * 0.5;
+            pressureField.pressure[sourceIdx + this.cols] += sourceValue * 0.5;
     }
 
     updateWarning(dt) {
-        if (this.warningMessage && this.warningMessage.timeLeft > 0) {
-            this.warningMessage.timeLeft -= dt;
-            if (this.warningMessage.timeLeft <= 0) {
+        if (this.warningMessage && this.warningMessage.timeout > 0) {
+            this.warningMessage.timeout -= dt;
+            if (this.warningMessage.timeout <= 0) {
                 this.warningMessage = null;
             }
         }

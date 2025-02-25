@@ -9,9 +9,11 @@ class WaveSimulation {
 
         // Physical parameters
         this.c = SimConfig.physics.speedOfSound;
+        this.rho = SimConfig.physics.density; // Air density
         this.dx = SimConfig.room.physicalWidth / this.cols;
-        this.dt = (this.dx / (this.c * Math.sqrt(2))) * 0.5;
-        this.c2dt2_dx2 = (this.c * this.c * this.dt * this.dt) / (this.dx * this.dx);
+
+        // Time step (CFL condition for interleaved scheme)
+        this.dt = this.dx / (this.c * Math.sqrt(2));
 
         // Medium properties
         this.wallAbsorption = SimConfig.medium.defaultWallAbsorption;
@@ -27,18 +29,18 @@ class WaveSimulation {
     }
 
     update() {
-        // First update pressure field
+        // Update pressure and velocity fields
         this.pressureField.updatePressure(
             this.geometry.getWalls(),
-            this.c2dt2_dx2,
+            this.dt,
+            this.dx,
+            this.c,
+            this.rho,
             this.wallAbsorption,
             this.airAbsorption
         );
 
-        // Swap buffers after pressure update
-        this.pressureField.swapBuffers();
-
-        // Then update source (which will modify the current buffer)
+        // Update source
         if (this.source.isActive) {
             this.source.updateSource(this.pressureField, this.dt);
         }
@@ -67,6 +69,10 @@ class WaveSimulation {
 
     getPressure(x, y) {
         return this.pressureField.getPressure(x, y, this.cellSize);
+    }
+
+    getVelocity(x, y) {
+        return this.pressureField.getVelocity(x, y, this.cellSize);
     }
 
     updateWarning() {
