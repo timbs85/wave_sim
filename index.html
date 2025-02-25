@@ -5,7 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sound Wave Propagation Simulation</title>
+
+    <!-- p5.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+
+    <!-- ImGui -->
+    <script src="imgui-js/dist/imgui.umd.js"></script>
+    <script src="imgui-js/dist/imgui_impl.umd.js"></script>
+
     <style>
         body {
             margin: 0;
@@ -14,15 +21,38 @@
             flex-direction: column;
             align-items: center;
             background: #f0f0f0;
+            overflow: hidden;
+            /* Prevent scrolling */
         }
 
         canvas {
             border: 1px solid #ccc;
         }
+
+        #imgui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        #imgui-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: auto;
+            z-index: 1000;
+        }
     </style>
 </head>
 
 <body>
+    <!-- ImGui container -->
+    <div id="imgui-container"></div>
+
     <!-- Load configuration first -->
     <script src="config.js"></script>
 
@@ -33,7 +63,8 @@
     <script src="WaveSource.js"></script>
     <script src="waveSimulation.js"></script>
 
-    <!-- Load main sketch last -->
+    <!-- Load GUI and sketch last -->
+    <script src="gui.js"></script>
     <script src="sketch.js"></script>
 </body>
 

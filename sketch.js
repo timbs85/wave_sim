@@ -1,8 +1,10 @@
 let simulation;
-let colorMode = 'pressure'; // 'pressure' or 'intensity'
-let paused = false;
-let simResolution = 8; // pixels per simulation cell (higher = faster but coarser)
-let canvas;
+// These are now controlled by the GUI
+// let visualizationMode = 'pressure'; // 'pressure' or 'intensity'
+// let paused = false;
+// Make resolution globally accessible for GUI
+window.simResolution = 8; // pixels per simulation cell (higher = faster but coarser)
+let p5Canvas;
 let ctx; // Canvas 2D context
 let contrastValue = 1.0; // Default contrast value (1.0 = no change)
 let lowClipValue = 0.0; // Default low clip value (0.0 = no clipping)
@@ -12,6 +14,13 @@ let imageData; // ImageData for direct pixel manipulation
 const PRESSURE_STEPS = 1024; // Number of pre-calculated color values
 let wavelengthCircleOpacity = 0; // Opacity for the wavelength circle
 let wavelengthCircleTimeout = 0; // Timeout for the wavelength circle
+
+// Make simulation globally accessible for GUI
+window.simulation = null;
+window.contrastValue = 1.0;
+window.lowClipValue = 0.0;
+window.visualizationMode = 'pressure';
+window.paused = false;
 
 function initColorLookup() {
     colorLookup = {
@@ -55,15 +64,16 @@ function initColorLookup() {
 
 function setup() {
     // Create canvas with willReadFrequently attribute
-    canvas = createCanvas(1200, 800);
-    ctx = canvas.elt.getContext('2d', { willReadFrequently: true });
+    p5Canvas = createCanvas(1200, 800);
+    ctx = p5Canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
 
     // Initialize color lookup table
     initColorLookup();
 
     // Initialize simulation
-    simulation = new WaveSimulation(width, height, simResolution);
+    simulation = new WaveSimulation(width, height, window.simResolution);
+    window.simulation = simulation;  // Make accessible to GUI
 
     // Set initial source position and trigger an impulse
     console.log('Setting initial source position...');
@@ -75,160 +85,8 @@ function setup() {
     // Initialize rendering buffers
     imageData = new ImageData(width, height);
 
-    // Layout configuration
-    const margin = 20;
-    const sliderWidth = 150;
-    const spacing = 10;
-
-    // Create container div for controls
-    let controlsDiv = createDiv('');
-    controlsDiv.style('padding', margin + 'px');
-    controlsDiv.style('background-color', '#f0f0f0');
-    controlsDiv.style('border-radius', '5px');
-    controlsDiv.style('margin-top', '10px');
-    controlsDiv.style('display', 'grid');
-    controlsDiv.style('grid-template-columns', 'repeat(2, 1fr)');
-    controlsDiv.style('gap', '10px');
-    controlsDiv.style('width', width + 'px');
-
-    // Left column controls
-    let leftDiv = createDiv('');
-
-    // Air absorption control
-    let airDiv = createDiv('');
-    createSpan('Air Absorption: ').parent(airDiv);
-    let airSlider = createSlider(0, 100, 80);  // Start with high air absorption (80%)
-    airSlider.style('width', sliderWidth + 'px');
-    airSlider.parent(airDiv);
-    let airReadout = createSpan('80%').parent(airDiv);
-    airSlider.input(() => {
-        const value = airSlider.value();
-        airReadout.html(value + '%');
-        simulation.setAirAbsorption(value / 100);
-    });
-    airDiv.parent(leftDiv);
-
-    // Wall absorption control
-    let absorbDiv = createDiv('');
-    absorbDiv.style('margin-top', spacing + 'px');
-    createSpan('Wall Absorption: ').parent(absorbDiv);
-    let absorptionSlider = createSlider(0, 100, 90);  // Start with high wall absorption (90%)
-    absorptionSlider.style('width', sliderWidth + 'px');
-    absorptionSlider.parent(absorbDiv);
-    let wallReadout = createSpan('90%').parent(absorbDiv);
-    absorptionSlider.input(() => {
-        const value = absorptionSlider.value();
-        wallReadout.html(value + '%');
-        simulation.setWallAbsorption(value / 100);
-    });
-    absorbDiv.parent(leftDiv);
-
-    // Frequency control
-    let freqDiv = createDiv('');
-    freqDiv.style('margin-top', spacing + 'px');
-    createSpan('Frequency (Hz): ').parent(freqDiv);
-    let freqSlider = createSlider(20, 500, 440);  // Default to 440 Hz (concert A)
-    freqSlider.style('width', sliderWidth + 'px');
-    freqSlider.parent(freqDiv);
-    let freqReadout = createSpan('440 Hz').parent(freqDiv);
-    freqSlider.input(() => {
-        const value = freqSlider.value();
-        freqReadout.html(value + ' Hz');
-        simulation.setFrequency(value);
-    });
     // Set initial frequency
     simulation.setFrequency(440);
-    freqDiv.parent(leftDiv);
-
-    // Contrast control
-    let contrastDiv = createDiv('');
-    contrastDiv.style('margin-top', spacing + 'px');
-    createSpan('Contrast: ').parent(contrastDiv);
-    let contrastSlider = createSlider(1, 100, 50);  // Linear range, default to middle
-    contrastSlider.style('width', sliderWidth + 'px');
-    contrastSlider.parent(contrastDiv);
-
-    // Calculate initial contrast value
-    const initialNormalizedValue = (50 - 1) / 99;
-    contrastValue = Math.pow(2, initialNormalizedValue * 4);
-    let contrastReadout = createSpan('50').parent(contrastDiv);
-
-    contrastSlider.input(() => {
-        // Map slider value [1,100] to contrast range [1.0, 15.0] with exponential curve
-        const normalizedValue = (contrastSlider.value() - 1) / 99; // Map to [0,1]
-        contrastValue = Math.pow(2, normalizedValue * 4); // Maps to [1.0, 16.0]
-        contrastReadout.html(contrastSlider.value());
-    });
-    contrastDiv.parent(leftDiv);
-
-    // Low clip control
-    let lowClipDiv = createDiv('');
-    lowClipDiv.style('margin-top', spacing + 'px');
-    createSpan('Low Clip: ').parent(lowClipDiv);
-    let lowClipSlider = createSlider(0, 100, 0);  // Linear range, default to 0 (no clipping)
-    lowClipSlider.style('width', sliderWidth + 'px');
-    lowClipSlider.parent(lowClipDiv);
-    let lowClipReadout = createSpan('0%').parent(lowClipDiv);
-
-    lowClipSlider.input(() => {
-        const value = lowClipSlider.value();
-        lowClipValue = value / 100; // Convert to [0,1] range
-        lowClipReadout.html(value + '%');
-    });
-    lowClipDiv.parent(leftDiv);
-
-    leftDiv.parent(controlsDiv);
-
-    // Right column controls
-    let rightDiv = createDiv('');
-
-    // Resolution control
-    let resDiv = createDiv('');
-    createSpan('Resolution: ').parent(resDiv);
-    let resolutionSelect = createSelect();
-    resolutionSelect.style('width', sliderWidth + 'px');
-    resolutionSelect.option('Ultra Fast (32px)', 32);
-    resolutionSelect.option('Very Fast (16px)', 16);
-    resolutionSelect.option('Fast (8px)', 8);
-    resolutionSelect.option('Medium (4px)', 4);
-    resolutionSelect.option('Fine (2px)', 2);
-    resolutionSelect.selected(simResolution);
-    resolutionSelect.changed(() => {
-        simResolution = parseInt(resolutionSelect.value());
-        if (simulation) {
-            simulation.dispose();  // Clean up old simulation
-        }
-        simulation = new WaveSimulation(width, height, simResolution);
-    });
-    resolutionSelect.parent(resDiv);
-    resDiv.parent(rightDiv);
-
-    // Button controls
-    let buttonDiv = createDiv('');
-    buttonDiv.style('margin-top', spacing + 'px');
-
-    let triggerButton = createButton('Trigger Impulse');
-    triggerButton.style('margin-right', spacing + 'px');
-    triggerButton.mousePressed(() => {
-        simulation.triggerImpulse();
-    });
-    triggerButton.parent(buttonDiv);
-
-    let modeButton = createButton('Toggle Color Mode');
-    modeButton.style('margin-right', spacing + 'px');
-    modeButton.mousePressed(() => {
-        colorMode = colorMode === 'pressure' ? 'intensity' : 'pressure';
-    });
-    modeButton.parent(buttonDiv);
-
-    let pauseButton = createButton('Pause/Resume');
-    pauseButton.mousePressed(() => {
-        paused = !paused;
-    });
-    pauseButton.parent(buttonDiv);
-
-    buttonDiv.parent(rightDiv);
-    rightDiv.parent(controlsDiv);
 
     // Disable smoothing for sharper visualization
     noSmooth();
@@ -236,10 +94,10 @@ function setup() {
 
 function getPressureColorIndex(pressure) {
     // Apply contrast to the pressure value
-    const contrastedPressure = pressure * contrastValue;
+    const contrastedPressure = pressure * window.contrastValue;
 
     // Apply low clip - if absolute pressure is below threshold, set to zero
-    const clippedPressure = Math.abs(contrastedPressure) < lowClipValue ? 0 : contrastedPressure;
+    const clippedPressure = Math.abs(contrastedPressure) < window.lowClipValue ? 0 : contrastedPressure;
 
     // Map pressure to lookup table index with clamping
     const normalizedPressure = (clippedPressure + 1.0) / 2.0; // Map from [-1,1] to [0,1]
@@ -250,8 +108,13 @@ function getPressureColorIndex(pressure) {
 function draw() {
     background(0);
 
+    // Safety check for simulation
+    if (!simulation || !simulation.getPressure) {
+        return;
+    }
+
     // Update simulation if not paused
-    if (!paused) {
+    if (!window.paused) {
         simulation.update();
         simulation.updateWarning();
 
@@ -259,7 +122,7 @@ function draw() {
         let hasActivity = false;
         for (let i = 0; i < simulation.cols; i++) {
             for (let j = 0; j < simulation.rows; j++) {
-                if (Math.abs(simulation.getPressure(i * simResolution, j * simResolution)) > 0.001) {
+                if (Math.abs(simulation.getPressure(i * window.simResolution, j * window.simResolution)) > 0.001) {
                     hasActivity = true;
                     break;
                 }
@@ -271,8 +134,8 @@ function draw() {
         }
     }
 
-    // Update source position on mouse click
-    if (mouseIsPressed && mouseY < height) {
+    // Update source position on mouse click - only if ImGui is not capturing mouse
+    if (mouseIsPressed && mouseY < height && ImGui && !ImGui.GetIO().WantCaptureMouse) {
         simulation.setSource(mouseX, mouseY);
         // Show wavelength circle for 3 seconds when source is moved
         wavelengthCircleOpacity = 255;
@@ -289,24 +152,29 @@ function draw() {
         }
     }
 
+    // Safety check for simulation and its components
+    if (!simulation.geometry || !simulation.geometry.getWalls) {
+        return;
+    }
+
     // Get the current color lookup table based on mode
-    const currentLookup = colorLookup[colorMode];
+    const currentLookup = colorLookup[window.visualizationMode];
     const pixels = new Uint8Array(imageData.data.buffer);
 
     // Update pixel buffer
     for (let i = 0; i < simulation.cols; i++) {
         for (let j = 0; j < simulation.rows; j++) {
             const idx = i + j * simulation.cols;
-            const x = i * simResolution;
-            const y = j * simResolution;
+            const x = i * window.simResolution;
+            const y = j * window.simResolution;
 
             // If this is a wall cell, fill with wall color
             const walls = simulation.geometry.getWalls();
             if (walls[idx] === 1) {
                 const colorOffset = (PRESSURE_STEPS - 1) * 4;  // Use last color in lookup for walls
-                for (let py = 0; py < simResolution; py++) {
+                for (let py = 0; py < window.simResolution; py++) {
                     const rowOffset = ((y + py) * width + x) * 4;
-                    for (let px = 0; px < simResolution; px++) {
+                    for (let px = 0; px < window.simResolution; px++) {
                         const pixelOffset = rowOffset + px * 4;
                         pixels[pixelOffset] = 128;     // Gray color for walls
                         pixels[pixelOffset + 1] = 128;
@@ -320,20 +188,20 @@ function draw() {
             // Get pressure values for current cell and neighbors
             const p00 = simulation.getPressure(x, y);
             const p10 = (i < simulation.cols - 1 && walls[idx + 1] !== 1) ?
-                simulation.getPressure(x + simResolution, y) : p00;
+                simulation.getPressure(x + window.simResolution, y) : p00;
             const p01 = (j < simulation.rows - 1 && walls[idx + simulation.cols] !== 1) ?
-                simulation.getPressure(x, y + simResolution) : p00;
+                simulation.getPressure(x, y + window.simResolution) : p00;
             const p11 = (i < simulation.cols - 1 && j < simulation.rows - 1 &&
                 walls[idx + simulation.cols + 1] !== 1) ?
-                simulation.getPressure(x + simResolution, y + simResolution) : p00;
+                simulation.getPressure(x + window.simResolution, y + window.simResolution) : p00;
 
             // Fill the pixel region with interpolation
-            for (let py = 0; py < simResolution; py++) {
-                const v = py / simResolution;
+            for (let py = 0; py < window.simResolution; py++) {
+                const v = py / window.simResolution;
                 const rowOffset = ((y + py) * width + x) * 4;
 
-                for (let px = 0; px < simResolution; px++) {
-                    const u = px / simResolution;
+                for (let px = 0; px < window.simResolution; px++) {
+                    const u = px / window.simResolution;
 
                     // Bilinear interpolation
                     const pressure = (1 - u) * (1 - v) * p00 +
@@ -361,8 +229,8 @@ function draw() {
     // Draw source position
     noFill();
     stroke(255, 255, 0);
-    const sourceX = simulation.source.x * simResolution;
-    const sourceY = simulation.source.y * simResolution;
+    const sourceX = simulation.source.x * window.simResolution;
+    const sourceY = simulation.source.y * window.simResolution;
     const sourceDiameter = 8; // Fixed 8-pixel diameter for source circle
     ellipse(
         sourceX,
@@ -374,7 +242,7 @@ function draw() {
     // Draw wavelength circle (if visible)
     if (wavelengthCircleOpacity > 0) {
         const wavelengthCells = simulation.c / (simulation.source.frequency * simulation.dx);
-        const radius = wavelengthCells * simResolution;
+        const radius = wavelengthCells * window.simResolution;
 
         // Draw dotted circle
         push();
@@ -419,5 +287,10 @@ function draw() {
             width / 2,
             height / 2
         );
+    }
+
+    // Render ImGui
+    if (window.renderGUI) {
+        window.renderGUI();
     }
 } 
