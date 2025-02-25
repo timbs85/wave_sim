@@ -3,10 +3,11 @@ let colorMode = 'pressure'; // 'pressure' or 'intensity'
 let paused = false;
 let simResolution = 8; // pixels per simulation cell (higher = faster but coarser)
 let canvas;
+let contrastValue = 0.1; // Default contrast value (smaller = higher contrast)
 
 function setup() {
     // Create canvas with willReadFrequently attribute
-    canvas = createCanvas(800, 600);
+    canvas = createCanvas(1200, 800);
     let ctx = canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
 
@@ -37,7 +38,7 @@ function setup() {
     // Air absorption control
     let airDiv = createDiv('');
     createSpan('Air Absorption: ').parent(airDiv);
-    let airSlider = createSlider(0, 100, 20);  // Start with low air absorption
+    let airSlider = createSlider(0, 100, 80);  // Start with high air absorption (80%)
     airSlider.style('width', sliderWidth + 'px');
     airSlider.parent(airDiv);
     airSlider.input(() => {
@@ -49,7 +50,7 @@ function setup() {
     let absorbDiv = createDiv('');
     absorbDiv.style('margin-top', spacing + 'px');
     createSpan('Wall Absorption: ').parent(absorbDiv);
-    let absorptionSlider = createSlider(0, 100, 30);
+    let absorptionSlider = createSlider(0, 100, 90);  // Start with high wall absorption (90%)
     absorptionSlider.style('width', sliderWidth + 'px');
     absorptionSlider.parent(absorbDiv);
     absorptionSlider.input(() => {
@@ -61,13 +62,27 @@ function setup() {
     let freqDiv = createDiv('');
     freqDiv.style('margin-top', spacing + 'px');
     createSpan('Frequency (Hz): ').parent(freqDiv);
-    let freqSlider = createSlider(20, 1000, 440);
+    let freqSlider = createSlider(20, 500, 200);  // Lower max frequency and default for better visualization
     freqSlider.style('width', sliderWidth + 'px');
     freqSlider.parent(freqDiv);
     freqSlider.input(() => {
         simulation.setFrequency(freqSlider.value());
     });
     freqDiv.parent(leftDiv);
+
+    // Contrast control
+    let contrastDiv = createDiv('');
+    contrastDiv.style('margin-top', spacing + 'px');
+    createSpan('Contrast: ').parent(contrastDiv);
+    let contrastSlider = createSlider(1, 100, 70);  // Higher value = higher contrast
+    contrastSlider.style('width', sliderWidth + 'px');
+    contrastSlider.parent(contrastDiv);
+    contrastSlider.input(() => {
+        // Exponential curve that bunches high contrast (small values) at the high end
+        const normalizedValue = (100 - contrastSlider.value()) / 100;  // Invert slider value
+        contrastValue = 0.01 + 0.39 * Math.pow(normalizedValue, 0.3);  // Will range from ~0.4 to ~0.01
+    });
+    contrastDiv.parent(leftDiv);
 
     leftDiv.parent(controlsDiv);
 
@@ -124,7 +139,8 @@ function setup() {
 }
 
 function getPressureColor(pressure) {
-    const intensity = map(pressure, -0.5, 0.5, 0, 1);
+    // Use contrastValue for pressure range mapping
+    const intensity = map(pressure, -contrastValue, contrastValue, 0, 1);
     if (colorMode === 'pressure') {
         // Improved color mapping for pressure visualization
         if (intensity > 0.5) {
@@ -144,7 +160,7 @@ function getPressureColor(pressure) {
         }
     } else {
         // Intensity visualization (grayscale with enhanced contrast)
-        const gray = map(abs(pressure), 0, 0.5, 0, 255);
+        const gray = map(abs(pressure), 0, contrastValue, 0, 255);
         return color(gray);
     }
 }

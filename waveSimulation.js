@@ -64,9 +64,9 @@ class WaveSimulation {
 
     createRoomLayout() {
         // Room dimensions (in grid cells)
-        const roomWidth = Math.floor(this.cols * 0.35);  // Each room takes ~35% of width
-        const roomHeight = Math.floor(this.rows * 0.6);  // Rooms take 60% of height
-        const corridorHeight = Math.floor(this.rows * 0.2);  // Corridor is 20% of height
+        const roomWidth = Math.floor(this.cols * 0.40);  // Each room takes ~40% of width
+        const roomHeight = Math.floor(this.rows * 0.70);  // Rooms take 70% of height
+        const corridorHeight = Math.floor(this.rows * 0.15);  // Corridor is 15% of height
         const corridorLength = Math.floor(this.cols * 0.15); // Corridor length
 
         // Position of rooms
