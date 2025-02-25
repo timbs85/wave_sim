@@ -4,14 +4,9 @@ class PressureField {
         this.rows = rows;
         const gridSize = cols * rows;
 
-        // Create pressure grid (cell centers)
-        this.pressure = new Float32Array(gridSize);
-
-        // Create velocity components (staggered grid)
-        // vx is stored at (i+1/2, j) - need one extra column
-        // vy is stored at (i, j+1/2) - need one extra row
-        this.vx = new Float32Array((cols + 1) * rows);
-        this.vy = new Float32Array(cols * (rows + 1));
+        // Store two time steps of pressure (current and previous)
+        this.pressureCurrent = new Float32Array(gridSize);
+        this.pressurePrevious = new Float32Array(gridSize);
 
         // Create neighbor information arrays
         this.nonWallNeighborCount = new Uint8Array(gridSize);
@@ -19,35 +14,79 @@ class PressureField {
     }
 
     reset() {
-        this.pressure.fill(0);
-        this.vx.fill(0);
-        this.vy.fill(0);
+        this.pressureCurrent.fill(0);
+        this.pressurePrevious.fill(0);
     }
 
     dispose() {
         // Clear all buffers
-        this.pressure = null;
-        this.vx = null;
-        this.vy = null;
+        this.pressureCurrent = null;
+        this.pressurePrevious = null;
         this.nonWallNeighborCount = null;
         this.neighborIndices = null;
     }
 
     getPressure(x, y, cellSize) {
-        // Bilinear interpolation for pressure
+        // Higher-order interpolation for pressure
         const fx = x / cellSize;
         const fy = y / cellSize;
         const ix = Math.floor(fx);
         const iy = Math.floor(fy);
 
+        if (ix >= 1 && ix < this.cols - 2 && iy >= 1 && iy < this.rows - 2) {
+            const wx = fx - ix;
+            const wy = fy - iy;
+
+            // Cubic interpolation weights
+            const wx2 = wx * wx;
+            const wx3 = wx2 * wx;
+            const wy2 = wy * wy;
+            const wy3 = wy2 * wy;
+
+            const h00 = 2 * wx3 - 3 * wx2 + 1;
+            const h10 = -2 * wx3 + 3 * wx2;
+            const h01 = wx3 - 2 * wx2 + wx;
+            const h11 = wx3 - wx2;
+
+            const v00 = 2 * wy3 - 3 * wy2 + 1;
+            const v10 = -2 * wy3 + 3 * wy2;
+            const v01 = wy3 - 2 * wy2 + wy;
+            const v11 = wy3 - wy2;
+
+            // Sample pressure values
+            const p00 = this.pressureCurrent[ix + iy * this.cols];
+            const p10 = this.pressureCurrent[(ix + 1) + iy * this.cols];
+            const p01 = this.pressureCurrent[ix + (iy + 1) * this.cols];
+            const p11 = this.pressureCurrent[(ix + 1) + (iy + 1) * this.cols];
+
+            // Compute derivatives
+            const dx = (this.pressureCurrent[(ix + 1) + iy * this.cols] - this.pressureCurrent[(ix - 1) + iy * this.cols]) * 0.5;
+            const dy = (this.pressureCurrent[ix + (iy + 1) * this.cols] - this.pressureCurrent[ix + (iy - 1) * this.cols]) * 0.5;
+            const dxy = (this.pressureCurrent[(ix + 1) + (iy + 1) * this.cols] - this.pressureCurrent[(ix - 1) + (iy + 1) * this.cols] -
+                this.pressureCurrent[(ix + 1) + (iy - 1) * this.cols] + this.pressureCurrent[(ix - 1) + (iy - 1) * this.cols]) * 0.25;
+
+            // Bicubic interpolation
+            return h00 * v00 * p00 +
+                h10 * v00 * p10 +
+                h00 * v10 * p01 +
+                h10 * v10 * p11 +
+                h01 * v00 * dx +
+                h11 * v00 * dx +
+                h00 * v01 * dy +
+                h10 * v01 * dy +
+                h01 * v10 * dxy +
+                h11 * v10 * dxy;
+        }
+
+        // Fall back to bilinear interpolation near boundaries
         if (ix >= 0 && ix < this.cols - 1 && iy >= 0 && iy < this.rows - 1) {
             const wx = fx - ix;
             const wy = fy - iy;
 
-            const p00 = this.pressure[ix + iy * this.cols];
-            const p10 = this.pressure[(ix + 1) + iy * this.cols];
-            const p01 = this.pressure[ix + (iy + 1) * this.cols];
-            const p11 = this.pressure[(ix + 1) + (iy + 1) * this.cols];
+            const p00 = this.pressureCurrent[ix + iy * this.cols];
+            const p10 = this.pressureCurrent[(ix + 1) + iy * this.cols];
+            const p01 = this.pressureCurrent[ix + (iy + 1) * this.cols];
+            const p11 = this.pressureCurrent[(ix + 1) + (iy + 1) * this.cols];
 
             return (1 - wx) * (1 - wy) * p00 +
                 wx * (1 - wy) * p10 +
@@ -64,21 +103,15 @@ class PressureField {
         const ix = Math.floor(fx);
         const iy = Math.floor(fy);
 
-        if (ix >= 0 && ix < this.cols - 1 && iy >= 0 && iy < this.rows - 1) {
-            const wx = fx - ix;
-            const wy = fy - iy;
+        if (ix >= 1 && ix < this.cols - 2 && iy >= 1 && iy < this.rows - 2) {
+            // Calculate velocity components using central differences of pressure
+            const dx = (this.pressureCurrent[(ix + 1) + iy * this.cols] -
+                this.pressureCurrent[(ix - 1) + iy * this.cols]) * 0.5;
+            const dy = (this.pressureCurrent[ix + (iy + 1) * this.cols] -
+                this.pressureCurrent[ix + (iy - 1) * this.cols]) * 0.5;
 
-            // Interpolate x-velocity components
-            const vx1 = this.vx[ix + iy * (this.cols + 1)];
-            const vx2 = this.vx[(ix + 1) + iy * (this.cols + 1)];
-            const vx = (1 - wx) * vx1 + wx * vx2;
-
-            // Interpolate y-velocity components
-            const vy1 = this.vy[ix + iy * this.cols];
-            const vy2 = this.vy[ix + (iy + 1) * this.cols];
-            const vy = (1 - wy) * vy1 + wy * vy2;
-
-            return Math.sqrt(vx * vx + vy * vy);
+            // Return velocity magnitude
+            return Math.sqrt(dx * dx + dy * dy);
         }
         return 0;
     }
@@ -110,82 +143,54 @@ class PressureField {
     }
 
     updatePressure(walls, dt, dx, c, rho, wallAbsorption, airAbsorption) {
-        // First update velocities
-        this._updateVelocities(walls, dt, dx, rho);
+        // Calculate coefficient for the FDTD update
+        const courant = (c * dt / dx);
+        const courantSquared = courant * courant;
 
-        // Then update pressures
-        this._updatePressures(walls, dt, dx, c, rho, wallAbsorption, airAbsorption);
-    }
+        // Create buffer for next time step
+        const pressureNext = new Float32Array(this.pressureCurrent.length);
 
-    _updateVelocities(walls, dt, dx, rho) {
-        const k_rho_h = dt / (rho * dx);
-
-        // Update x-velocities
-        for (let i = 0; i < this.cols; i++) {
-            for (let j = 0; j < this.rows; j++) {
-                const idx = i + j * (this.cols + 1);
-                const pressureIdx = i + j * this.cols;
-
-                // Skip if either adjacent cell is a wall
-                if (i < this.cols - 1 && !walls[pressureIdx] && !walls[pressureIdx + 1]) {
-                    // Velocity update at i+1/2
-                    this.vx[idx] -= k_rho_h * (this.pressure[pressureIdx + 1] - this.pressure[pressureIdx]);
-                }
-            }
-        }
-
-        // Update y-velocities
-        for (let i = 0; i < this.cols; i++) {
-            for (let j = 0; j < this.rows; j++) {
+        for (let j = 1; j < this.rows - 1; j++) {
+            for (let i = 1; i < this.cols - 1; i++) {
                 const idx = i + j * this.cols;
-
-                // Skip if either adjacent cell is a wall
-                if (j < this.rows - 1 && !walls[idx] && !walls[idx + this.cols]) {
-                    // Velocity update at j+1/2
-                    this.vy[idx] -= k_rho_h * (this.pressure[idx + this.cols] - this.pressure[idx]);
+                if (walls[idx]) {
+                    pressureNext[idx] = 0;
+                    continue;
                 }
-            }
-        }
-    }
 
-    _updatePressures(walls, dt, dx, c, rho, wallAbsorption, airAbsorption) {
-        const k_rho_c2_h = (rho * c * c * dt) / dx;
-        let maxPressure = 0;
-        let maxPressurePos = { x: 0, y: 0 };
+                // Two-step FDTD update equation
+                // ψ(n+1) = 2ψ(n) - ψ(n-1) + c²Δt²/h² * (∇²ψ(n))
+                const laplacian = (
+                    this.pressureCurrent[idx + 1] +      // right
+                    this.pressureCurrent[idx - 1] +      // left
+                    this.pressureCurrent[idx + this.cols] + // down
+                    this.pressureCurrent[idx - this.cols] - // up
+                    4 * this.pressureCurrent[idx]        // center
+                );
 
-        for (let i = 1; i < this.cols - 1; i++) {
-            for (let j = 1; j < this.rows - 1; j++) {
-                const idx = i + j * this.cols;
-                if (walls[idx]) continue;
+                pressureNext[idx] =
+                    2 * this.pressureCurrent[idx] -
+                    this.pressurePrevious[idx] +
+                    courantSquared * laplacian;
 
-                // Calculate divergence using staggered velocities
-                const vx_diff = this.vx[(i + 1) + j * (this.cols + 1)] - this.vx[i + j * (this.cols + 1)];
-                const vy_diff = this.vy[i + (j + 1) * this.cols] - this.vy[i + j * this.cols];
-
-                this.pressure[idx] -= k_rho_c2_h * (vx_diff + vy_diff);
-
-                // Apply absorptions
+                // Apply boundary conditions and absorption
                 if (this.nonWallNeighborCount[idx] < 4) {
-                    this.pressure[idx] *= (1 - wallAbsorption);
+                    const beta = 1 - wallAbsorption;
+                    pressureNext[idx] *= beta;
                 }
-                this.pressure[idx] *= (1 - airAbsorption);
 
-                // Track maximum pressure
-                if (Math.abs(this.pressure[idx]) > maxPressure) {
-                    maxPressure = Math.abs(this.pressure[idx]);
-                    maxPressurePos = { x: i, y: j };
-                }
+                // Apply air absorption
+                pressureNext[idx] *= (1 - airAbsorption);
 
                 // Clean up small values
-                if (Math.abs(this.pressure[idx]) < SimConfig.physics.minPressureThreshold) {
-                    this.pressure[idx] = 0;
+                if (Math.abs(pressureNext[idx]) < SimConfig.physics.minPressureThreshold) {
+                    pressureNext[idx] = 0;
                 }
             }
         }
 
-        // Log maximum pressure if it's significant
-        if (maxPressure > 0.01) {
-            console.log('Max pressure:', maxPressure, 'at position:', maxPressurePos);
-        }
+        // Update time steps
+        this.pressurePrevious.set(this.pressureCurrent);
+        this.pressureCurrent.set(pressureNext);
     }
 } 

@@ -73,7 +73,6 @@ class WaveSource {
 
             if (phase <= Math.PI) {
                 const sourceValue = this.amplitude * gaussianAmplitude * Math.sin(phase);
-                console.log('Emitting pressure:', sourceValue, 'at position:', this.x, this.y);
                 this._applySourcePressure(pressureField, sourceIdx, sourceValue);
             } else {
                 console.log('Cycle complete');
@@ -88,17 +87,58 @@ class WaveSource {
     }
 
     _applySourcePressure(pressureField, sourceIdx, sourceValue) {
-        pressureField.pressure[sourceIdx] += sourceValue;
+        // For the two-step method, we need to inject the source term into both current and previous time steps
+        // This ensures proper wave generation in the FDTD scheme
 
-        // Add to neighbors for smoother emission
+        // Apply to current time step with full amplitude
+        pressureField.pressureCurrent[sourceIdx] += sourceValue;
+
+        // Apply to previous time step with slightly reduced amplitude to create forward-propagating waves
+        pressureField.pressurePrevious[sourceIdx] += sourceValue * 0.9;
+
+        // Apply smooth spatial distribution using a compact 5-point stencil
+        const diagonalWeight = 0.35;  // Weight for diagonal neighbors
+        const cardinalWeight = 0.5;   // Weight for cardinal neighbors
+
+        // Cardinal directions - current time step
         if (this.x > 0)
-            pressureField.pressure[sourceIdx - 1] += sourceValue * 0.5;
+            pressureField.pressureCurrent[sourceIdx - 1] += sourceValue * cardinalWeight;
         if (this.x < this.cols - 1)
-            pressureField.pressure[sourceIdx + 1] += sourceValue * 0.5;
+            pressureField.pressureCurrent[sourceIdx + 1] += sourceValue * cardinalWeight;
         if (this.y > 0)
-            pressureField.pressure[sourceIdx - this.cols] += sourceValue * 0.5;
+            pressureField.pressureCurrent[sourceIdx - this.cols] += sourceValue * cardinalWeight;
         if (this.y < this.rows - 1)
-            pressureField.pressure[sourceIdx + this.cols] += sourceValue * 0.5;
+            pressureField.pressureCurrent[sourceIdx + this.cols] += sourceValue * cardinalWeight;
+
+        // Cardinal directions - previous time step (with reduced amplitude)
+        if (this.x > 0)
+            pressureField.pressurePrevious[sourceIdx - 1] += sourceValue * cardinalWeight * 0.9;
+        if (this.x < this.cols - 1)
+            pressureField.pressurePrevious[sourceIdx + 1] += sourceValue * cardinalWeight * 0.9;
+        if (this.y > 0)
+            pressureField.pressurePrevious[sourceIdx - this.cols] += sourceValue * cardinalWeight * 0.9;
+        if (this.y < this.rows - 1)
+            pressureField.pressurePrevious[sourceIdx + this.cols] += sourceValue * cardinalWeight * 0.9;
+
+        // Diagonal neighbors - current time step
+        if (this.x > 0 && this.y > 0)
+            pressureField.pressureCurrent[sourceIdx - 1 - this.cols] += sourceValue * diagonalWeight;
+        if (this.x < this.cols - 1 && this.y > 0)
+            pressureField.pressureCurrent[sourceIdx + 1 - this.cols] += sourceValue * diagonalWeight;
+        if (this.x > 0 && this.y < this.rows - 1)
+            pressureField.pressureCurrent[sourceIdx - 1 + this.cols] += sourceValue * diagonalWeight;
+        if (this.x < this.cols - 1 && this.y < this.rows - 1)
+            pressureField.pressureCurrent[sourceIdx + 1 + this.cols] += sourceValue * diagonalWeight;
+
+        // Diagonal neighbors - previous time step (with reduced amplitude)
+        if (this.x > 0 && this.y > 0)
+            pressureField.pressurePrevious[sourceIdx - 1 - this.cols] += sourceValue * diagonalWeight * 0.9;
+        if (this.x < this.cols - 1 && this.y > 0)
+            pressureField.pressurePrevious[sourceIdx + 1 - this.cols] += sourceValue * diagonalWeight * 0.9;
+        if (this.x > 0 && this.y < this.rows - 1)
+            pressureField.pressurePrevious[sourceIdx - 1 + this.cols] += sourceValue * diagonalWeight * 0.9;
+        if (this.x < this.cols - 1 && this.y < this.rows - 1)
+            pressureField.pressurePrevious[sourceIdx + 1 + this.cols] += sourceValue * diagonalWeight * 0.9;
     }
 
     updateWarning(dt) {
