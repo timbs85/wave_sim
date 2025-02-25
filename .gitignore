@@ -44,4 +44,7 @@ Thumbs.db
 
 # p5.js specific
 libraries/
-examples/ 
+examples/
+
+# ImGui related
+imgui-js/ 
