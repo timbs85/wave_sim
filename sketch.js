@@ -5,6 +5,7 @@ let simResolution = 8; // pixels per simulation cell (higher = faster but coarse
 let canvas;
 let ctx; // Canvas 2D context
 let contrastValue = 1.0; // Default contrast value (1.0 = no change)
+let lowClipValue = 0.0; // Default low clip value (0.0 = no clipping)
 let buffer; // Pixel buffer for efficient rendering
 let colorLookup; // Color lookup table
 let imageData; // ImageData for direct pixel manipulation
@@ -160,6 +161,22 @@ function setup() {
     });
     contrastDiv.parent(leftDiv);
 
+    // Low clip control
+    let lowClipDiv = createDiv('');
+    lowClipDiv.style('margin-top', spacing + 'px');
+    createSpan('Low Clip: ').parent(lowClipDiv);
+    let lowClipSlider = createSlider(0, 100, 0);  // Linear range, default to 0 (no clipping)
+    lowClipSlider.style('width', sliderWidth + 'px');
+    lowClipSlider.parent(lowClipDiv);
+    let lowClipReadout = createSpan('0%').parent(lowClipDiv);
+
+    lowClipSlider.input(() => {
+        const value = lowClipSlider.value();
+        lowClipValue = value / 100; // Convert to [0,1] range
+        lowClipReadout.html(value + '%');
+    });
+    lowClipDiv.parent(leftDiv);
+
     leftDiv.parent(controlsDiv);
 
     // Right column controls
@@ -220,8 +237,12 @@ function setup() {
 function getPressureColorIndex(pressure) {
     // Apply contrast to the pressure value
     const contrastedPressure = pressure * contrastValue;
+
+    // Apply low clip - if absolute pressure is below threshold, set to zero
+    const clippedPressure = Math.abs(contrastedPressure) < lowClipValue ? 0 : contrastedPressure;
+
     // Map pressure to lookup table index with clamping
-    const normalizedPressure = (contrastedPressure + 1.0) / 2.0; // Map from [-1,1] to [0,1]
+    const normalizedPressure = (clippedPressure + 1.0) / 2.0; // Map from [-1,1] to [0,1]
     const clampedPressure = Math.max(0, Math.min(1, normalizedPressure));
     return Math.floor(clampedPressure * (PRESSURE_STEPS - 1));
 }
