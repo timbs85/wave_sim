@@ -46,8 +46,8 @@ class WaveSimulation {
         }
     }
 
-    setSource(x, y) {
-        this.source.setPosition(x, y, this.cellSize, this.geometry.getWalls(), this.c);
+    setSource(gridX, gridY) {
+        return this.source.setPosition(gridX, gridY, this.geometry.getWalls());
     }
 
     setFrequency(freq) {

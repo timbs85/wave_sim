@@ -19,21 +19,17 @@ class WaveSource {
         this.warningMessage = null;
     }
 
-    setPosition(x, y, cellSize, walls, c) {
-        const newX = Math.floor(x / cellSize);
-        const newY = Math.floor(y / cellSize);
-
-        // Check if new position is valid (not in a wall)
-        if (newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows) {
-            const idx = newX + newY * this.cols;
+    setPosition(gridX, gridY, walls) {
+        // Check if position is valid (not in a wall and within bounds)
+        if (gridX >= 0 && gridX < this.cols && gridY >= 0 && gridY < this.rows) {
+            const idx = gridX + gridY * this.cols;
             if (!walls[idx]) {
-                this.x = newX;
-                this.y = newY;
-                console.log('Source position set to:', this.x, this.y);
-                return;
+                this.x = gridX;
+                this.y = gridY;
+                return true;
             }
         }
-        console.log('Invalid source position:', x, y);
+        return false;
     }
 
     setFrequency(freq, walls, c) {

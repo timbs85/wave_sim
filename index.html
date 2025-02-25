@@ -16,27 +16,42 @@
     <style>
         body {
             margin: 0;
-            padding: 20px;
+            padding: 0;
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            background: #f0f0f0;
+            background: #000;
             overflow: hidden;
-            /* Prevent scrolling */
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #controls-container {
+            width: 400px;
+            height: 100vh;
+            background: #1a1a1a;
+            position: relative;
+            border-right: 1px solid #333;
+        }
+
+        #simulation-container {
+            flex: 1;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
         }
 
         canvas {
-            border: 1px solid #ccc;
+            border: none;
         }
 
         #imgui-container {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
+            width: 400px;
             height: 100%;
             pointer-events: none;
-            z-index: 1000;
         }
 
         #imgui-container canvas {
@@ -44,14 +59,18 @@
             top: 0;
             left: 0;
             pointer-events: auto;
-            z-index: 1000;
         }
     </style>
 </head>
 
 <body>
-    <!-- ImGui container -->
-    <div id="imgui-container"></div>
+    <!-- Left side - Controls -->
+    <div id="controls-container">
+        <div id="imgui-container"></div>
+    </div>
+
+    <!-- Right side - Simulation -->
+    <div id="simulation-container"></div>
 
     <!-- Load configuration first -->
     <script src="config.js"></script>

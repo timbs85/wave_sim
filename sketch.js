@@ -63,10 +63,19 @@ function initColorLookup() {
 }
 
 function setup() {
-    // Create canvas with willReadFrequently attribute
-    p5Canvas = createCanvas(1200, 800);
+    // Create canvas with willReadFrequently attribute and place it in the simulation container
+    const container = document.getElementById('simulation-container');
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    p5Canvas = createCanvas(containerWidth, containerHeight);
+    p5Canvas.parent('simulation-container');
     ctx = p5Canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
+
+    // Set drawing modes
+    ellipseMode(CENTER);  // Draw circles from their center point
+    noSmooth();
 
     // Initialize color lookup table
     initColorLookup();
@@ -76,11 +85,9 @@ function setup() {
     window.simulation = simulation;  // Make accessible to GUI
 
     // Set initial source position and trigger an impulse
-    console.log('Setting initial source position...');
-    simulation.setSource(width * 0.25, height * 0.6);  // Position source at 25% from left, 60% from top
-    console.log('Source position set, triggering impulse...');
-    simulation.triggerImpulse();  // Initial impulse to see if simulation is working
-    console.log('Initial impulse triggered');
+    const initialPos = screenToGrid(width * 0.25, height * 0.6);
+    simulation.setSource(initialPos.x, initialPos.y);
+    simulation.triggerImpulse();
 
     // Initialize rendering buffers
     imageData = new ImageData(width, height);
@@ -88,8 +95,36 @@ function setup() {
     // Set initial frequency
     simulation.setFrequency(440);
 
-    // Disable smoothing for sharper visualization
-    noSmooth();
+    // Handle window resizing
+    window.addEventListener('resize', windowResized);
+}
+
+// Add window resize handler
+function windowResized() {
+    const container = document.getElementById('simulation-container');
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    resizeCanvas(containerWidth, containerHeight);
+
+    // Reinitialize simulation with new dimensions
+    const oldSimulation = simulation;
+    const sourceNormalizedX = oldSimulation.source.x / oldSimulation.cols;
+    const sourceNormalizedY = oldSimulation.source.y / oldSimulation.rows;
+
+    simulation = new WaveSimulation(width, height, window.simResolution);
+    window.simulation = simulation;
+
+    // Restore simulation parameters
+    const newSourceX = Math.floor(sourceNormalizedX * simulation.cols);
+    const newSourceY = Math.floor(sourceNormalizedY * simulation.rows);
+    simulation.setSource(newSourceX, newSourceY);
+    simulation.setFrequency(oldSimulation.source.frequency);
+    simulation.setAirAbsorption(oldSimulation.airAbsorption);
+    simulation.setWallAbsorption(oldSimulation.wallAbsorption);
+
+    // Update image data buffer
+    imageData = new ImageData(width, height);
 }
 
 function getPressureColorIndex(pressure) {
@@ -103,6 +138,21 @@ function getPressureColorIndex(pressure) {
     const normalizedPressure = (clippedPressure + 1.0) / 2.0; // Map from [-1,1] to [0,1]
     const clampedPressure = Math.max(0, Math.min(1, normalizedPressure));
     return Math.floor(clampedPressure * (PRESSURE_STEPS - 1));
+}
+
+// Coordinate conversion helpers
+function screenToGrid(screenX, screenY) {
+    return {
+        x: Math.floor(screenX / window.simResolution),
+        y: Math.floor(screenY / window.simResolution)
+    };
+}
+
+function gridToScreen(gridX, gridY) {
+    return {
+        x: gridX * window.simResolution,  // Sample at grid points
+        y: gridY * window.simResolution   // Sample at grid points
+    };
 }
 
 function draw() {
@@ -122,7 +172,8 @@ function draw() {
         let hasActivity = false;
         for (let i = 0; i < simulation.cols; i++) {
             for (let j = 0; j < simulation.rows; j++) {
-                if (Math.abs(simulation.getPressure(i * window.simResolution, j * window.simResolution)) > 0.001) {
+                const screenPos = gridToScreen(i, j);
+                if (Math.abs(simulation.getPressure(screenPos.x, screenPos.y)) > 0.001) {
                     hasActivity = true;
                     break;
                 }
@@ -136,7 +187,8 @@ function draw() {
 
     // Update source position on mouse click - only if ImGui is not capturing mouse
     if (mouseIsPressed && mouseY < height && ImGui && !ImGui.GetIO().WantCaptureMouse) {
-        simulation.setSource(mouseX, mouseY);
+        const gridPos = screenToGrid(mouseX, mouseY);
+        simulation.setSource(gridPos.x, gridPos.y);
         // Show wavelength circle for 3 seconds when source is moved
         wavelengthCircleOpacity = 255;
         wavelengthCircleTimeout = 3;
@@ -165,15 +217,14 @@ function draw() {
     for (let i = 0; i < simulation.cols; i++) {
         for (let j = 0; j < simulation.rows; j++) {
             const idx = i + j * simulation.cols;
-            const x = i * window.simResolution;
-            const y = j * window.simResolution;
+            const screenPos = gridToScreen(i, j);
 
             // If this is a wall cell, fill with wall color
             const walls = simulation.geometry.getWalls();
             if (walls[idx] === 1) {
                 const colorOffset = (PRESSURE_STEPS - 1) * 4;  // Use last color in lookup for walls
                 for (let py = 0; py < window.simResolution; py++) {
-                    const rowOffset = ((y + py) * width + x) * 4;
+                    const rowOffset = ((j * window.simResolution + py) * width + i * window.simResolution) * 4;
                     for (let px = 0; px < window.simResolution; px++) {
                         const pixelOffset = rowOffset + px * 4;
                         pixels[pixelOffset] = 128;     // Gray color for walls
@@ -186,19 +237,25 @@ function draw() {
             }
 
             // Get pressure values for current cell and neighbors
-            const p00 = simulation.getPressure(x, y);
+            const p00 = simulation.getPressure(screenPos.x, screenPos.y);
+
+            // Get neighbor positions in screen space
+            const rightPos = gridToScreen(i + 1, j);
+            const bottomPos = gridToScreen(i, j + 1);
+            const bottomRightPos = gridToScreen(i + 1, j + 1);
+
             const p10 = (i < simulation.cols - 1 && walls[idx + 1] !== 1) ?
-                simulation.getPressure(x + window.simResolution, y) : p00;
+                simulation.getPressure(rightPos.x, rightPos.y) : p00;
             const p01 = (j < simulation.rows - 1 && walls[idx + simulation.cols] !== 1) ?
-                simulation.getPressure(x, y + window.simResolution) : p00;
+                simulation.getPressure(bottomPos.x, bottomPos.y) : p00;
             const p11 = (i < simulation.cols - 1 && j < simulation.rows - 1 &&
                 walls[idx + simulation.cols + 1] !== 1) ?
-                simulation.getPressure(x + window.simResolution, y + window.simResolution) : p00;
+                simulation.getPressure(bottomRightPos.x, bottomRightPos.y) : p00;
 
             // Fill the pixel region with interpolation
             for (let py = 0; py < window.simResolution; py++) {
                 const v = py / window.simResolution;
-                const rowOffset = ((y + py) * width + x) * 4;
+                const rowOffset = ((j * window.simResolution + py) * width + i * window.simResolution) * 4;
 
                 for (let px = 0; px < window.simResolution; px++) {
                     const u = px / window.simResolution;
@@ -229,15 +286,19 @@ function draw() {
     // Draw source position
     noFill();
     stroke(255, 255, 0);
-    const sourceX = simulation.source.x * window.simResolution;
-    const sourceY = simulation.source.y * window.simResolution;
-    const sourceDiameter = 8; // Fixed 8-pixel diameter for source circle
+    const screenPos = gridToScreen(simulation.source.x, simulation.source.y);
+    const sourceDiameter = Math.max(8, window.simResolution / 2); // Scale source indicator with resolution
+
+    // Draw source indicator
+    push();
+    strokeWeight(1);
     ellipse(
-        sourceX,
-        sourceY,
+        screenPos.x,
+        screenPos.y,
         sourceDiameter,
         sourceDiameter
     );
+    pop();
 
     // Draw wavelength circle (if visible)
     if (wavelengthCircleOpacity > 0) {
@@ -251,8 +312,8 @@ function draw() {
         strokeWeight(1);
         drawingContext.setLineDash([5, 5]); // Create dotted line
         ellipse(
-            sourceX,
-            sourceY,
+            screenPos.x,
+            screenPos.y,
             radius * 2,
             radius * 2
         );

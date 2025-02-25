@@ -21,12 +21,14 @@ async function initGUI() {
 
         // Create and setup canvas
         imguiCanvas = document.createElement('canvas');
-        imguiCanvas.style.position = 'fixed';
+        const container = document.getElementById('controls-container');
+        imguiCanvas.width = container.clientWidth;
+        imguiCanvas.height = container.clientHeight;
+        imguiCanvas.style.position = 'absolute';
         imguiCanvas.style.top = '0';
         imguiCanvas.style.left = '0';
         imguiCanvas.style.width = '100%';
         imguiCanvas.style.height = '100%';
-        imguiCanvas.style.zIndex = '1000';
         document.getElementById('imgui-container').appendChild(imguiCanvas);
 
         // Initialize ImGui
@@ -38,11 +40,23 @@ async function initGUI() {
 
         // Setup style
         ImGui.StyleColorsDark();
+        const style = ImGui.GetStyle();
+        style.WindowRounding = 0;
+        style.WindowBorderSize = 0;
+        style.WindowPadding = new ImGui.Vec2(10, 10);
 
         // Init implementation
         const gl = imguiCanvas.getContext('webgl2', { alpha: true }) ||
             imguiCanvas.getContext('webgl', { alpha: true });
         ImGui_Impl.Init(gl);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('controls-container');
+            imguiCanvas.width = container.clientWidth;
+            imguiCanvas.height = container.clientHeight;
+            gl.viewport(0, 0, imguiCanvas.width, imguiCanvas.height);
+        });
 
         // Sync initial state with window variables
         window.contrastValue = Math.pow(2, ((params.contrast - 1) / 99) * 4);
@@ -73,8 +87,21 @@ function renderGUI() {
         ImGui_Impl.NewFrame();
         ImGui.NewFrame();
 
-        // Main control window
-        ImGui.Begin("Wave Simulation Controls", null, ImGui.WindowFlags.NoCollapse);
+        // Main control window - Set to fill the entire controls container
+        const windowFlags = ImGui.WindowFlags.NoCollapse |
+            ImGui.WindowFlags.NoMove |
+            ImGui.WindowFlags.NoResize |
+            ImGui.WindowFlags.NoBringToFrontOnFocus |
+            ImGui.WindowFlags.NoTitleBar;  // Remove title bar for full width
+
+        ImGui.SetNextWindowPos(new ImGui.Vec2(0, 0));
+        ImGui.SetNextWindowSize(new ImGui.Vec2(imguiCanvas.width, imguiCanvas.height));
+
+        ImGui.Begin("Wave Simulation Controls", null, windowFlags);
+
+        // Add a custom title since we removed the title bar
+        ImGui.Text("Wave Simulation Controls");
+        ImGui.Separator();
 
         // Air absorption slider
         const airAbs = [params.airAbsorption];
