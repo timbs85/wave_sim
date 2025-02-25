@@ -61,12 +61,11 @@ function initColorLookup() {
 }
 
 function setup() {
-    // Create canvas with willReadFrequently attribute and place it in the simulation container
-    const container = document.getElementById('simulation-container');
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
+    // Create canvas with fixed dimensions
+    const CANVAS_WIDTH = 800;
+    const CANVAS_HEIGHT = 600;
 
-    p5Canvas = createCanvas(containerWidth, containerHeight);
+    p5Canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     p5Canvas.parent('simulation-container');
     ctx = p5Canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
@@ -78,51 +77,25 @@ function setup() {
     // Initialize color lookup table
     initColorLookup();
 
-    // Initialize simulation
-    simulation = new WaveSimulation(width, height, window.simResolution);
+    // Initialize simulation with fixed dimensions
+    simulation = new WaveSimulation(CANVAS_WIDTH, CANVAS_HEIGHT, window.simResolution);
     window.simulation = simulation;  // Make accessible to GUI
 
     // Set initial source position and trigger an impulse
-    const initialPos = screenToGrid(width * 0.25, height * 0.6);
+    const initialPos = screenToGrid(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT * 0.6);
     simulation.setSource(initialPos.x, initialPos.y);
     simulation.triggerImpulse();
 
     // Initialize rendering buffers
-    imageData = new ImageData(width, height);
+    imageData = new ImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Set initial frequency
     simulation.setFrequency(440);
-
-    // Handle window resizing
-    window.addEventListener('resize', windowResized);
 }
 
-// Add window resize handler
+// Remove window resize handler since we're using fixed dimensions
 function windowResized() {
-    const container = document.getElementById('simulation-container');
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-
-    resizeCanvas(containerWidth, containerHeight);
-
-    // Reinitialize simulation with new dimensions
-    const oldSimulation = simulation;
-    const sourceNormalizedX = oldSimulation.source.x / oldSimulation.cols;
-    const sourceNormalizedY = oldSimulation.source.y / oldSimulation.rows;
-
-    simulation = new WaveSimulation(width, height, window.simResolution);
-    window.simulation = simulation;
-
-    // Restore simulation parameters
-    const newSourceX = Math.floor(sourceNormalizedX * simulation.cols);
-    const newSourceY = Math.floor(sourceNormalizedY * simulation.rows);
-    simulation.setSource(newSourceX, newSourceY);
-    simulation.setFrequency(oldSimulation.source.frequency);
-    simulation.setAirAbsorption(oldSimulation.airAbsorption);
-    simulation.setWallAbsorption(oldSimulation.wallAbsorption);
-
-    // Update image data buffer
-    imageData = new ImageData(width, height);
+    // Do nothing - canvas size is fixed
 }
 
 function getPressureColorIndex(pressure) {
