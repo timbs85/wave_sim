@@ -150,16 +150,18 @@ class PressureField {
         // Create buffer for next time step
         const pressureNext = new Float32Array(this.pressureCurrent.length);
 
+        // Update interior points using normal wave equation
         for (let j = 1; j < this.rows - 1; j++) {
             for (let i = 1; i < this.cols - 1; i++) {
                 const idx = i + j * this.cols;
-                if (walls[idx]) {
+
+                // Skip only regular walls (type 1), let anechoic walls (type 2) participate
+                if (walls[idx] === 1) {
                     pressureNext[idx] = 0;
                     continue;
                 }
 
-                // Two-step FDTD update equation
-                // ψ(n+1) = 2ψ(n) - ψ(n-1) + c²Δt²/h² * (∇²ψ(n))
+                // Normal wave equation
                 const laplacian = (
                     this.pressureCurrent[idx + 1] +      // right
                     this.pressureCurrent[idx - 1] +      // left
@@ -173,8 +175,14 @@ class PressureField {
                     this.pressurePrevious[idx] +
                     courantSquared * laplacian;
 
-                // Apply boundary conditions and absorption
-                if (this.nonWallNeighborCount[idx] < 4) {
+                // Apply regular wall absorption only for points next to regular walls
+                let nearRegularWall = false;
+                if (walls[idx - 1] === 1 || walls[idx + 1] === 1 ||
+                    walls[idx - this.cols] === 1 || walls[idx + this.cols] === 1) {
+                    nearRegularWall = true;
+                }
+
+                if (nearRegularWall) {
                     const beta = 1 - wallAbsorption;
                     pressureNext[idx] *= beta;
                 }
@@ -186,6 +194,53 @@ class PressureField {
                 if (Math.abs(pressureNext[idx]) < SimConfig.physics.minPressureThreshold) {
                     pressureNext[idx] = 0;
                 }
+            }
+        }
+
+        // Apply absorbing boundary conditions at grid edges where there are no regular walls
+        const absorbCoeff = (courant - 1) / (courant + 1);  // First-order absorbing coefficient
+
+        // Right boundary
+        for (let j = 1; j < this.rows - 1; j++) {
+            const i = this.cols - 1;
+            const idx = i + j * this.cols;
+            if (walls[idx] !== 1) {  // Only apply to non-wall points
+                const prevIdx = (i - 1) + j * this.cols;
+                pressureNext[idx] = this.pressureCurrent[prevIdx] +
+                    absorbCoeff * (pressureNext[prevIdx] - this.pressureCurrent[idx]);
+            }
+        }
+
+        // Left boundary
+        for (let j = 1; j < this.rows - 1; j++) {
+            const i = 0;
+            const idx = i + j * this.cols;
+            if (walls[idx] !== 1) {
+                const nextIdx = (i + 1) + j * this.cols;
+                pressureNext[idx] = this.pressureCurrent[nextIdx] +
+                    absorbCoeff * (pressureNext[nextIdx] - this.pressureCurrent[idx]);
+            }
+        }
+
+        // Bottom boundary
+        for (let i = 1; i < this.cols - 1; i++) {
+            const j = this.rows - 1;
+            const idx = i + j * this.cols;
+            if (walls[idx] !== 1) {
+                const prevIdx = i + (j - 1) * this.cols;
+                pressureNext[idx] = this.pressureCurrent[prevIdx] +
+                    absorbCoeff * (pressureNext[prevIdx] - this.pressureCurrent[idx]);
+            }
+        }
+
+        // Top boundary
+        for (let i = 1; i < this.cols - 1; i++) {
+            const j = 0;
+            const idx = i + j * this.cols;
+            if (walls[idx] !== 1) {
+                const nextIdx = i + (j + 1) * this.cols;
+                pressureNext[idx] = this.pressureCurrent[nextIdx] +
+                    absorbCoeff * (pressureNext[nextIdx] - this.pressureCurrent[idx]);
             }
         }
 

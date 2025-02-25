@@ -7,9 +7,9 @@ const SimConfig = {
     room: {
         physicalWidth: 12.0,  // meters
         physicalHeight: 8.0,  // meters
-        leftRoomRatio: 0.40,  // percentage of total width
+        leftRoomRatio: 0.35,  // percentage of total width (size of the room)
         roomHeightRatio: 0.70,  // percentage of total height
-        corridorRatio: 0.15,  // percentage of total height
+        corridorRatio: 0.15,  // percentage of total height (door height)
         marginRatio: 0.05     // margin from edges
     },
     source: {

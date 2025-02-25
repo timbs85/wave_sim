@@ -187,18 +187,21 @@ function draw() {
             const idx = i + j * simulation.cols;
             const screenPos = gridToScreen(i, j);
 
-            // If this is a wall cell, fill with wall color
+            // If this is a wall cell, fill with appropriate wall color
             const walls = simulation.geometry.getWalls();
-            if (walls[idx] === 1) {
-                const colorOffset = (PRESSURE_STEPS - 1) * 4;  // Use last color in lookup for walls
+            if (walls[idx] > 0) {
+                const isAnechoic = walls[idx] === 2;
+                const wallColor = isAnechoic ? 32 : 128; // Much darker for anechoic surfaces
+                const wallAlpha = isAnechoic ? 64 : 255; // Semi-transparent for anechoic
+
                 for (let py = 0; py < window.simResolution; py++) {
                     const rowOffset = ((j * window.simResolution + py) * width + i * window.simResolution) * 4;
                     for (let px = 0; px < window.simResolution; px++) {
                         const pixelOffset = rowOffset + px * 4;
-                        pixels[pixelOffset] = 128;     // Gray color for walls
-                        pixels[pixelOffset + 1] = 128;
-                        pixels[pixelOffset + 2] = 128;
-                        pixels[pixelOffset + 3] = 255;
+                        pixels[pixelOffset] = wallColor;     // Wall color
+                        pixels[pixelOffset + 1] = wallColor;
+                        pixels[pixelOffset + 2] = wallColor;
+                        pixels[pixelOffset + 3] = wallAlpha; // Make anechoic walls semi-transparent
                     }
                 }
                 continue;  // Skip interpolation for wall cells
