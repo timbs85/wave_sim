@@ -4,6 +4,7 @@ let paused = false;
 let simResolution = 8; // pixels per simulation cell (higher = faster but coarser)
 let canvas;
 let contrastValue = 0.1; // Default contrast value (smaller = higher contrast)
+let buffer; // Pixel buffer for efficient rendering
 
 function setup() {
     // Create canvas with willReadFrequently attribute
@@ -13,6 +14,10 @@ function setup() {
 
     // Initialize simulation
     simulation = new WaveSimulation(width, height, simResolution);
+
+    // Create pixel buffer for rendering
+    buffer = createImage(width, height);
+    buffer.loadPixels();
 
     // Layout configuration
     const margin = 20;
@@ -146,23 +151,25 @@ function getPressureColor(pressure) {
         // Improved color mapping for pressure visualization
         if (intensity > 0.5) {
             // Pure red for positive pressure (no blue blending)
-            return color(
+            return [
                 map(intensity, 0.5, 1, 0, 255), // Red
                 0,                              // Green
-                0                               // Blue
-            );
+                0,                              // Blue
+                255                             // Alpha
+            ];
         } else {
             // Pure blue for negative pressure (no red blending)
-            return color(
+            return [
                 0,                              // Red
                 0,                              // Green
-                map(intensity, 0, 0.5, 255, 0)  // Blue
-            );
+                map(intensity, 0, 0.5, 255, 0), // Blue
+                255                             // Alpha
+            ];
         }
     } else {
         // Intensity visualization (grayscale with enhanced contrast)
         const gray = map(abs(pressure), 0, contrastValue, 0, 255);
-        return color(gray);
+        return [gray, gray, gray, 255];
     }
 }
 
@@ -180,29 +187,41 @@ function draw() {
         simulation.setSource(mouseX, mouseY);
     }
 
-    // Visualize the wave field using rectangles
-    noStroke();
+    // Update pixel buffer
+    buffer.loadPixels();
     for (let i = 0; i < simulation.cols; i++) {
         for (let j = 0; j < simulation.rows; j++) {
             const idx = i + j * simulation.cols;
 
+            // Calculate the pixel region for this cell
+            const x = i * simResolution;
+            const y = j * simResolution;
+
+            // Get color for this cell
+            let cellColor;
             if (simulation.walls[idx] === 1) {
-                // Draw walls in gray
-                fill(100);
+                cellColor = [100, 100, 100, 255]; // Gray for walls
             } else {
-                // Draw pressure field
-                const pressure = simulation.getPressure(i * simResolution, j * simResolution);
-                fill(getPressureColor(pressure));
+                const pressure = simulation.getPressure(x, y);
+                cellColor = getPressureColor(pressure);
             }
 
-            rect(
-                i * simResolution,
-                j * simResolution,
-                simResolution,
-                simResolution
-            );
+            // Fill the pixel region for this cell
+            for (let px = 0; px < simResolution; px++) {
+                for (let py = 0; py < simResolution; py++) {
+                    const pixelIndex = ((y + py) * width + (x + px)) * 4;
+                    buffer.pixels[pixelIndex] = cellColor[0];     // R
+                    buffer.pixels[pixelIndex + 1] = cellColor[1]; // G
+                    buffer.pixels[pixelIndex + 2] = cellColor[2]; // B
+                    buffer.pixels[pixelIndex + 3] = cellColor[3]; // A
+                }
+            }
         }
     }
+    buffer.updatePixels();
+
+    // Draw the buffer to the screen
+    image(buffer, 0, 0);
 
     // Draw source position
     noFill();
@@ -212,7 +231,7 @@ function draw() {
     ellipse(
         centerX,
         centerY,
-        simResolution * 0.8,  // Make circle size relative to cell size
+        simResolution * 0.8,
         simResolution * 0.8
     );
 
