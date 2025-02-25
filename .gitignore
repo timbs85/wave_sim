@@ -48,4 +48,4 @@ examples/
 
 # ImGui related
 imgui-js/
-imgui/ 
+lib/
