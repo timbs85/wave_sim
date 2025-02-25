@@ -47,4 +47,5 @@ libraries/
 examples/
 
 # ImGui related
-imgui-js/ 
+imgui-js/
+imgui/ 
