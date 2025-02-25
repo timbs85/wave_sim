@@ -1,5 +1,9 @@
 class WaveSimulation {
     constructor(width, height, cellSize = 2) {
+        // Physical dimensions (in meters)
+        this.physicalWidth = 12.0;  // 12 meters wide
+        this.physicalHeight = 8.0;  // 8 meters high
+
         this.width = width;
         this.height = height;
         this.cellSize = cellSize;
@@ -29,24 +33,25 @@ class WaveSimulation {
 
         // Simulation parameters
         this.c = 343; // Speed of sound in m/s
-        this.dx = 0.1; // Grid spacing in meters
-        this.dt = (this.dx / (this.c * Math.sqrt(2))) * 0.5; // Time step (CFL condition)
+
+        // Grid spacing in meters (adjusted based on resolution)
+        this.dx = this.physicalWidth / this.cols;
+
+        // Time step (CFL condition)
+        this.dt = (this.dx / (this.c * Math.sqrt(2))) * 0.5;
 
         // Medium and boundary parameters
         this.wallAbsorption = 0.1; // Wall absorption coefficient (0 = full reflection, 1 = full absorption)
         this.airAbsorption = 0.001; // Air absorption coefficient (higher = more absorption per meter)
 
         // Source parameters
-        this.sourceX = Math.floor(this.cols / 2);
-        this.sourceY = Math.floor(this.rows / 2);
+        this.sourceX = Math.floor(this.cols * 0.25);  // 25% from left
+        this.sourceY = Math.floor(this.rows * 0.60);  // 60% from top
         this.frequency = 440; // Hz
         this.amplitude = 0.5;
         this.isSourceActive = false;
         this.time = 0;
-        this.cycleComplete = false; // Track if we've completed our half cycle
-
-        // Debug flag to verify absorption
-        console.log("Initial absorption:", this.wallAbsorption);
+        this.cycleComplete = false;
 
         // Precalculate constants
         this.c2dt2_dx2 = (this.c * this.c * this.dt * this.dt) / (this.dx * this.dx);
@@ -98,9 +103,9 @@ class WaveSimulation {
             this.walls[corridorEndX + j * this.cols] = 0;
         }
 
-        // Set initial source position to center of left room
-        this.sourceX = leftRoomX + Math.floor(roomWidth / 2);
-        this.sourceY = roomY + Math.floor(roomHeight / 2);
+        // Set initial source position to 25% from left, 60% from top
+        this.sourceX = Math.floor(this.cols * 0.25);  // 25% from left
+        this.sourceY = Math.floor(this.rows * 0.60);  // 60% from top
     }
 
     precalculateNeighborInfo() {
