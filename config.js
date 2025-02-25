@@ -2,8 +2,7 @@ const SimConfig = {
     physics: {
         speedOfSound: 343,    // Speed of sound in m/s
         density: 1.225,       // Air density in kg/m³
-        minPressureThreshold: 0.001,
-        gaussianWidth: 0.0001
+        minPressureThreshold: 1e-12,  // Much lower threshold to preserve subtle waves
     },
     room: {
         physicalWidth: 12.0,  // meters

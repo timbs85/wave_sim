@@ -7,13 +7,15 @@ class WaveSource {
         // Source parameters
         this.x = Math.floor(cols * SimConfig.source.defaultX);
         this.y = Math.floor(rows * SimConfig.source.defaultY);
-        this.frequency = SimConfig.source.defaultFrequency;
-        this.amplitude = SimConfig.source.defaultAmplitude;
+
+        // Create default signal
+        this.signal = new Signal('sine', {
+            frequency: SimConfig.source.defaultFrequency,
+            amplitude: SimConfig.source.defaultAmplitude
+        });
 
         // State
         this.isActive = false;
-        this.time = 0;
-        this.cycleComplete = false;
         this.warningMessage = null;
     }
 
@@ -35,7 +37,7 @@ class WaveSource {
     }
 
     setFrequency(freq, walls, c) {
-        this.frequency = freq;
+        this.signal.setFrequency(freq);
 
         // Calculate wavelength in grid cells
         const wavelength = c / freq;
@@ -54,34 +56,24 @@ class WaveSource {
         console.log('Source frequency set to:', freq, 'Hz');
     }
 
+    setSignal(type, params = {}) {
+        this.signal = new Signal(type, params);
+    }
+
     trigger() {
         this.isActive = true;
-        this.time = 0;
-        this.cycleComplete = false;
+        this.signal.reset();
         console.log('Source triggered');
     }
 
     updateSource(pressureField, dt) {
         if (!this.isActive) return;
 
-        const gaussianWidth = SimConfig.physics.gaussianWidth;
-        const gaussianAmplitude = Math.exp(-this.time * this.time / gaussianWidth);
-        const sourceIdx = this.x + this.y * this.cols;
-
-        if (gaussianAmplitude >= 0.01 && !this.cycleComplete) {
-            const phase = 2 * Math.PI * this.frequency * this.time;
-
-            if (phase <= Math.PI) {
-                const sourceValue = this.amplitude * gaussianAmplitude * Math.sin(phase);
-                this._applySourcePressure(pressureField, sourceIdx, sourceValue);
-            } else {
-                console.log('Cycle complete');
-                this.cycleComplete = true;
-            }
-
-            this.time += dt;
+        const sourceValue = this.signal.getValue(dt);
+        if (sourceValue !== 0) {
+            const sourceIdx = this.x + this.y * this.cols;
+            this._applySourcePressure(pressureField, sourceIdx, sourceValue);
         } else {
-            console.log('Source inactive or amplitude too low');
             this.isActive = false;
         }
     }
