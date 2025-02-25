@@ -3,21 +3,65 @@ let colorMode = 'pressure'; // 'pressure' or 'intensity'
 let paused = false;
 let simResolution = 8; // pixels per simulation cell (higher = faster but coarser)
 let canvas;
-let contrastValue = 0.1; // Default contrast value (smaller = higher contrast)
+let ctx; // Canvas 2D context
+let contrastValue = 1.0; // Default contrast value (1.0 = no change)
 let buffer; // Pixel buffer for efficient rendering
+let colorLookup; // Color lookup table
+let imageData; // ImageData for direct pixel manipulation
+const PRESSURE_STEPS = 1024; // Number of pre-calculated color values
+
+function initColorLookup() {
+    colorLookup = {
+        pressure: new Uint8Array(PRESSURE_STEPS * 4),
+        intensity: new Uint8Array(PRESSURE_STEPS * 4)
+    };
+
+    // Pre-calculate pressure colors
+    for (let i = 0; i < PRESSURE_STEPS; i++) {
+        // Apply non-linear mapping to pressure range for better visual dynamics
+        const normalizedI = i / (PRESSURE_STEPS - 1);
+        const pressureRange = 1.0; // Full range of pressure values
+        const pressure = (normalizedI * 2 - 1) * pressureRange; // Map to [-range, +range]
+
+        // Apply non-linear contrast curve for better visualization
+        const curvedPressure = Math.sign(pressure) * Math.pow(Math.abs(pressure), 0.7);
+        const intensity = map(curvedPressure, -1, 1, 0, 1);
+
+        const idx = i * 4;
+
+        // Pressure mode colors
+        if (intensity > 0.5) {
+            colorLookup.pressure[idx] = map(intensity, 0.5, 1, 0, 255); // Red
+            colorLookup.pressure[idx + 1] = 0;  // Green
+            colorLookup.pressure[idx + 2] = 0;  // Blue
+        } else {
+            colorLookup.pressure[idx] = 0;      // Red
+            colorLookup.pressure[idx + 1] = 0;  // Green
+            colorLookup.pressure[idx + 2] = map(intensity, 0, 0.5, 255, 0); // Blue
+        }
+        colorLookup.pressure[idx + 3] = 255;    // Alpha
+
+        // Intensity mode colors - use curved pressure for better contrast
+        const gray = map(abs(curvedPressure), 0, 1, 0, 255);
+        colorLookup.intensity[idx] = gray;
+        colorLookup.intensity[idx + 1] = gray;
+        colorLookup.intensity[idx + 2] = gray;
+        colorLookup.intensity[idx + 3] = 255;
+    }
+}
 
 function setup() {
     // Create canvas with willReadFrequently attribute
     canvas = createCanvas(1200, 800);
-    let ctx = canvas.elt.getContext('2d', { willReadFrequently: true });
+    ctx = canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
 
     // Initialize simulation
     simulation = new WaveSimulation(width, height, simResolution);
 
-    // Create pixel buffer for rendering
-    buffer = createImage(width, height);
-    buffer.loadPixels();
+    // Initialize rendering buffers
+    imageData = new ImageData(width, height);
+    initColorLookup();
 
     // Layout configuration
     const margin = 20;
@@ -44,8 +88,11 @@ function setup() {
     let airSlider = createSlider(0, 100, 80);  // Start with high air absorption (80%)
     airSlider.style('width', sliderWidth + 'px');
     airSlider.parent(airDiv);
+    let airReadout = createSpan('80%').parent(airDiv);
     airSlider.input(() => {
-        simulation.setAirAbsorption(airSlider.value() / 100);
+        const value = airSlider.value();
+        airReadout.html(value + '%');
+        simulation.setAirAbsorption(value / 100);
     });
     airDiv.parent(leftDiv);
 
@@ -56,8 +103,11 @@ function setup() {
     let absorptionSlider = createSlider(0, 100, 90);  // Start with high wall absorption (90%)
     absorptionSlider.style('width', sliderWidth + 'px');
     absorptionSlider.parent(absorbDiv);
+    let wallReadout = createSpan('90%').parent(absorbDiv);
     absorptionSlider.input(() => {
-        simulation.setWallAbsorption(absorptionSlider.value() / 100);
+        const value = absorptionSlider.value();
+        wallReadout.html(value + '%');
+        simulation.setWallAbsorption(value / 100);
     });
     absorbDiv.parent(leftDiv);
 
@@ -68,8 +118,11 @@ function setup() {
     let freqSlider = createSlider(20, 500, 200);  // Lower max frequency and default for better visualization
     freqSlider.style('width', sliderWidth + 'px');
     freqSlider.parent(freqDiv);
+    let freqReadout = createSpan('200 Hz').parent(freqDiv);
     freqSlider.input(() => {
-        simulation.setFrequency(freqSlider.value());
+        const value = freqSlider.value();
+        freqReadout.html(value + ' Hz');
+        simulation.setFrequency(value);
     });
     freqDiv.parent(leftDiv);
 
@@ -77,13 +130,20 @@ function setup() {
     let contrastDiv = createDiv('');
     contrastDiv.style('margin-top', spacing + 'px');
     createSpan('Contrast: ').parent(contrastDiv);
-    let contrastSlider = createSlider(1, 100, 70);  // Higher value = higher contrast
+    let contrastSlider = createSlider(1, 100, 50);  // Linear range, default to middle
     contrastSlider.style('width', sliderWidth + 'px');
     contrastSlider.parent(contrastDiv);
+
+    // Calculate initial contrast value
+    const initialNormalizedValue = (50 - 1) / 99;
+    contrastValue = Math.pow(2, initialNormalizedValue * 4);
+    let contrastReadout = createSpan('50').parent(contrastDiv);
+
     contrastSlider.input(() => {
-        // Exponential curve that bunches high contrast (small values) at the high end
-        const normalizedValue = (100 - contrastSlider.value()) / 100;  // Invert slider value
-        contrastValue = 0.01 + 0.39 * Math.pow(normalizedValue, 0.3);  // Will range from ~0.4 to ~0.01
+        // Map slider value [1,100] to contrast range [1.0, 15.0] with exponential curve
+        const normalizedValue = (contrastSlider.value() - 1) / 99; // Map to [0,1]
+        contrastValue = Math.pow(2, normalizedValue * 4); // Maps to [1.0, 16.0]
+        contrastReadout.html(contrastSlider.value());
     });
     contrastDiv.parent(leftDiv);
 
@@ -144,33 +204,13 @@ function setup() {
     noSmooth();
 }
 
-function getPressureColor(pressure) {
-    // Use contrastValue for pressure range mapping
-    const intensity = map(pressure, -contrastValue, contrastValue, 0, 1);
-    if (colorMode === 'pressure') {
-        // Improved color mapping for pressure visualization
-        if (intensity > 0.5) {
-            // Pure red for positive pressure (no blue blending)
-            return [
-                map(intensity, 0.5, 1, 0, 255), // Red
-                0,                              // Green
-                0,                              // Blue
-                255                             // Alpha
-            ];
-        } else {
-            // Pure blue for negative pressure (no red blending)
-            return [
-                0,                              // Red
-                0,                              // Green
-                map(intensity, 0, 0.5, 255, 0), // Blue
-                255                             // Alpha
-            ];
-        }
-    } else {
-        // Intensity visualization (grayscale with enhanced contrast)
-        const gray = map(abs(pressure), 0, contrastValue, 0, 255);
-        return [gray, gray, gray, 255];
-    }
+function getPressureColorIndex(pressure) {
+    // Apply contrast to the pressure value
+    const contrastedPressure = pressure * contrastValue;
+    // Map pressure to lookup table index with clamping
+    const normalizedPressure = (contrastedPressure + 1.0) / 2.0; // Map from [-1,1] to [0,1]
+    const clampedPressure = Math.max(0, Math.min(1, normalizedPressure));
+    return Math.floor(clampedPressure * (PRESSURE_STEPS - 1));
 }
 
 function draw() {
@@ -187,41 +227,44 @@ function draw() {
         simulation.setSource(mouseX, mouseY);
     }
 
+    // Get the current color lookup table based on mode
+    const currentLookup = colorLookup[colorMode];
+    const pixels = new Uint8Array(imageData.data.buffer);
+
     // Update pixel buffer
-    buffer.loadPixels();
     for (let i = 0; i < simulation.cols; i++) {
         for (let j = 0; j < simulation.rows; j++) {
             const idx = i + j * simulation.cols;
-
-            // Calculate the pixel region for this cell
             const x = i * simResolution;
             const y = j * simResolution;
 
             // Get color for this cell
-            let cellColor;
+            let colorOffset;
             if (simulation.walls[idx] === 1) {
-                cellColor = [100, 100, 100, 255]; // Gray for walls
+                // Use gray for walls (pre-calculate this offset)
+                colorOffset = (PRESSURE_STEPS - 1) * 4;
             } else {
                 const pressure = simulation.getPressure(x, y);
-                cellColor = getPressureColor(pressure);
+                const lookupIdx = getPressureColorIndex(pressure);
+                colorOffset = lookupIdx * 4;
             }
 
-            // Fill the pixel region for this cell
-            for (let px = 0; px < simResolution; px++) {
-                for (let py = 0; py < simResolution; py++) {
-                    const pixelIndex = ((y + py) * width + (x + px)) * 4;
-                    buffer.pixels[pixelIndex] = cellColor[0];     // R
-                    buffer.pixels[pixelIndex + 1] = cellColor[1]; // G
-                    buffer.pixels[pixelIndex + 2] = cellColor[2]; // B
-                    buffer.pixels[pixelIndex + 3] = cellColor[3]; // A
+            // Fill the pixel region efficiently using typed array operations
+            for (let py = 0; py < simResolution; py++) {
+                const rowOffset = ((y + py) * width + x) * 4;
+                for (let px = 0; px < simResolution; px++) {
+                    const pixelOffset = rowOffset + px * 4;
+                    pixels[pixelOffset] = currentLookup[colorOffset];
+                    pixels[pixelOffset + 1] = currentLookup[colorOffset + 1];
+                    pixels[pixelOffset + 2] = currentLookup[colorOffset + 2];
+                    pixels[pixelOffset + 3] = currentLookup[colorOffset + 3];
                 }
             }
         }
     }
-    buffer.updatePixels();
 
-    // Draw the buffer to the screen
-    image(buffer, 0, 0);
+    // Update the canvas with the new image data
+    ctx.putImageData(imageData, 0, 0);
 
     // Draw source position
     noFill();
