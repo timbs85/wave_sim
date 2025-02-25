@@ -9,6 +9,8 @@ let buffer; // Pixel buffer for efficient rendering
 let colorLookup; // Color lookup table
 let imageData; // ImageData for direct pixel manipulation
 const PRESSURE_STEPS = 1024; // Number of pre-calculated color values
+let wavelengthCircleOpacity = 0; // Opacity for the wavelength circle
+let wavelengthCircleTimeout = 0; // Timeout for the wavelength circle
 
 function initColorLookup() {
     colorLookup = {
@@ -115,15 +117,17 @@ function setup() {
     let freqDiv = createDiv('');
     freqDiv.style('margin-top', spacing + 'px');
     createSpan('Frequency (Hz): ').parent(freqDiv);
-    let freqSlider = createSlider(20, 500, 200);  // Lower max frequency and default for better visualization
+    let freqSlider = createSlider(20, 500, 440);  // Default to 440 Hz (concert A)
     freqSlider.style('width', sliderWidth + 'px');
     freqSlider.parent(freqDiv);
-    let freqReadout = createSpan('200 Hz').parent(freqDiv);
+    let freqReadout = createSpan('440 Hz').parent(freqDiv);
     freqSlider.input(() => {
         const value = freqSlider.value();
         freqReadout.html(value + ' Hz');
         simulation.setFrequency(value);
     });
+    // Set initial frequency
+    simulation.setFrequency(440);
     freqDiv.parent(leftDiv);
 
     // Contrast control
@@ -225,6 +229,19 @@ function draw() {
     // Update source position on mouse click
     if (mouseIsPressed && mouseY < height) {
         simulation.setSource(mouseX, mouseY);
+        // Show wavelength circle for 3 seconds when source is moved
+        wavelengthCircleOpacity = 255;
+        wavelengthCircleTimeout = 3;
+    }
+
+    // Update wavelength circle opacity
+    if (wavelengthCircleTimeout > 0) {
+        wavelengthCircleTimeout -= simulation.dt;
+        if (wavelengthCircleTimeout <= 0) {
+            wavelengthCircleOpacity = 0;
+        } else if (wavelengthCircleTimeout < 1) {
+            wavelengthCircleOpacity = Math.floor(255 * wavelengthCircleTimeout);
+        }
     }
 
     // Get the current color lookup table based on mode
@@ -238,21 +255,50 @@ function draw() {
             const x = i * simResolution;
             const y = j * simResolution;
 
-            // Get color for this cell
-            let colorOffset;
+            // If this is a wall cell, fill with wall color
             if (simulation.walls[idx] === 1) {
-                // Use gray for walls (pre-calculate this offset)
-                colorOffset = (PRESSURE_STEPS - 1) * 4;
-            } else {
-                const pressure = simulation.getPressure(x, y);
-                const lookupIdx = getPressureColorIndex(pressure);
-                colorOffset = lookupIdx * 4;
+                const colorOffset = (PRESSURE_STEPS - 1) * 4;  // Use last color in lookup for walls
+                for (let py = 0; py < simResolution; py++) {
+                    const rowOffset = ((y + py) * width + x) * 4;
+                    for (let px = 0; px < simResolution; px++) {
+                        const pixelOffset = rowOffset + px * 4;
+                        pixels[pixelOffset] = 128;     // Gray color for walls
+                        pixels[pixelOffset + 1] = 128;
+                        pixels[pixelOffset + 2] = 128;
+                        pixels[pixelOffset + 3] = 255;
+                    }
+                }
+                continue;  // Skip interpolation for wall cells
             }
 
-            // Fill the pixel region efficiently using typed array operations
+            // Get pressure values for current cell and neighbors
+            const p00 = simulation.getPressure(x, y);
+            const p10 = (i < simulation.cols - 1 && simulation.walls[idx + 1] !== 1) ?
+                simulation.getPressure(x + simResolution, y) : p00;
+            const p01 = (j < simulation.rows - 1 && simulation.walls[idx + simulation.cols] !== 1) ?
+                simulation.getPressure(x, y + simResolution) : p00;
+            const p11 = (i < simulation.cols - 1 && j < simulation.rows - 1 &&
+                simulation.walls[idx + simulation.cols + 1] !== 1) ?
+                simulation.getPressure(x + simResolution, y + simResolution) : p00;
+
+            // Fill the pixel region with interpolation
             for (let py = 0; py < simResolution; py++) {
+                const v = py / simResolution;
                 const rowOffset = ((y + py) * width + x) * 4;
+
                 for (let px = 0; px < simResolution; px++) {
+                    const u = px / simResolution;
+
+                    // Bilinear interpolation
+                    const pressure = (1 - u) * (1 - v) * p00 +
+                        u * (1 - v) * p10 +
+                        (1 - u) * v * p01 +
+                        u * v * p11;
+
+                    // Get color for interpolated pressure
+                    const lookupIdx = getPressureColorIndex(pressure);
+                    const colorOffset = lookupIdx * 4;
+
                     const pixelOffset = rowOffset + px * 4;
                     pixels[pixelOffset] = currentLookup[colorOffset];
                     pixels[pixelOffset + 1] = currentLookup[colorOffset + 1];
@@ -265,6 +311,27 @@ function draw() {
 
     // Update the canvas with the new image data
     ctx.putImageData(imageData, 0, 0);
+
+    // Draw wavelength circle (if visible)
+    if (wavelengthCircleOpacity > 0) {
+        const wavelengthCells = simulation.c / (simulation.frequency * simulation.dx);
+        const radius = wavelengthCells * simResolution;
+
+        // Draw dotted circle
+        push();
+        noFill();
+        stroke(255, 255, 0, wavelengthCircleOpacity);
+        strokeWeight(1);
+        drawingContext.setLineDash([5, 5]); // Create dotted line
+        ellipse(
+            (simulation.sourceX + 0.5) * simResolution,
+            (simulation.sourceY + 0.5) * simResolution,
+            radius * 2,
+            radius * 2
+        );
+        drawingContext.setLineDash([]); // Reset line style
+        pop();
+    }
 
     // Draw source position
     noFill();
