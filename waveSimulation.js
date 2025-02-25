@@ -17,8 +17,15 @@ class WaveSimulation {
         // Create wall grid (1 = wall, 0 = air)
         this.walls = new Uint8Array(gridSize);
 
+        // Create neighbor information arrays
+        this.nonWallNeighborCount = new Uint8Array(gridSize);
+        this.neighborIndices = new Int32Array(gridSize * 5);
+
         // Create the room layout
         this.createRoomLayout();
+
+        // Precalculate neighbor information
+        this.precalculateNeighborInfo();
 
         // Simulation parameters
         this.c = 343; // Speed of sound in m/s
@@ -44,20 +51,6 @@ class WaveSimulation {
         // Precalculate constants
         this.c2dt2_dx2 = (this.c * this.c * this.dt * this.dt) / (this.dx * this.dx);
 
-        // Precalculate neighbor indices for better performance
-        this.neighborIndices = new Int32Array(gridSize * 5);
-        for (let i = 1; i < this.cols - 1; i++) {
-            for (let j = 1; j < this.rows - 1; j++) {
-                const baseIdx = (i + j * this.cols) * 5;
-                const idx = i + j * this.cols;
-                this.neighborIndices[baseIdx] = idx;  // Center
-                this.neighborIndices[baseIdx + 1] = idx - 1;  // Left
-                this.neighborIndices[baseIdx + 2] = idx + 1;  // Right
-                this.neighborIndices[baseIdx + 3] = idx - this.cols;  // Up
-                this.neighborIndices[baseIdx + 4] = idx + this.cols;  // Down
-            }
-        }
-
         // Add warning message state
         this.warningMessage = null;
     }
@@ -67,7 +60,6 @@ class WaveSimulation {
         const roomWidth = Math.floor(this.cols * 0.40);  // Each room takes ~40% of width
         const roomHeight = Math.floor(this.rows * 0.70);  // Rooms take 70% of height
         const corridorHeight = Math.floor(this.rows * 0.15);  // Corridor is 15% of height
-        const corridorLength = Math.floor(this.cols * 0.15); // Corridor length
 
         // Position of rooms
         const margin = Math.floor(this.cols * 0.05);  // 5% margin from edges
@@ -109,6 +101,33 @@ class WaveSimulation {
         // Set initial source position to center of left room
         this.sourceX = leftRoomX + Math.floor(roomWidth / 2);
         this.sourceY = roomY + Math.floor(roomHeight / 2);
+    }
+
+    precalculateNeighborInfo() {
+        // Calculate neighbor indices and non-wall neighbor counts
+        for (let i = 1; i < this.cols - 1; i++) {
+            for (let j = 1; j < this.rows - 1; j++) {
+                const baseIdx = (i + j * this.cols) * 5;
+                const idx = i + j * this.cols;
+
+                // Store center and neighbor indices
+                this.neighborIndices[baseIdx] = idx;      // Center
+                this.neighborIndices[baseIdx + 1] = idx - 1;  // Left
+                this.neighborIndices[baseIdx + 2] = idx + 1;  // Right
+                this.neighborIndices[baseIdx + 3] = idx - this.cols;  // Up
+                this.neighborIndices[baseIdx + 4] = idx + this.cols;  // Down
+
+                // Count non-wall neighbors
+                if (!this.walls[idx]) {  // Only count for non-wall cells
+                    let count = 0;
+                    if (!this.isWall(i - 1, j)) count++;
+                    if (!this.isWall(i + 1, j)) count++;
+                    if (!this.isWall(i, j - 1)) count++;
+                    if (!this.isWall(i, j + 1)) count++;
+                    this.nonWallNeighborCount[idx] = count;
+                }
+            }
+        }
     }
 
     drawRectWalls(x, y, width, height) {
@@ -228,38 +247,36 @@ class WaveSimulation {
         // Update pressure values
         for (let i = 1; i < this.cols - 1; i++) {
             for (let j = 1; j < this.rows - 1; j++) {
-                // Skip update for wall cells
-                if (this.walls[i + j * this.cols] === 1) continue;
+                const idx = i + j * this.cols;
 
-                const baseIdx = (i + j * this.cols) * 5;
-                const idx = this.neighborIndices[baseIdx];
+                // Skip update for wall cells
+                if (this.walls[idx] === 1) continue;
+
+                const baseIdx = idx * 5;
                 const idxLeft = this.neighborIndices[baseIdx + 1];
                 const idxRight = this.neighborIndices[baseIdx + 2];
                 const idxUp = this.neighborIndices[baseIdx + 3];
                 const idxDown = this.neighborIndices[baseIdx + 4];
 
-                // Count non-wall neighbors for normalization
-                let numNeighbors = 0;
+                // Use precalculated neighbor sum
                 let neighborSum = 0;
+                if (!this.walls[idxLeft]) neighborSum += this.pressure[idxLeft];
+                if (!this.walls[idxRight]) neighborSum += this.pressure[idxRight];
+                if (!this.walls[idxUp]) neighborSum += this.pressure[idxUp];
+                if (!this.walls[idxDown]) neighborSum += this.pressure[idxDown];
 
-                if (!this.isWall(i - 1, j)) { numNeighbors++; neighborSum += this.pressure[idxLeft]; }
-                if (!this.isWall(i + 1, j)) { numNeighbors++; neighborSum += this.pressure[idxRight]; }
-                if (!this.isWall(i, j - 1)) { numNeighbors++; neighborSum += this.pressure[idxUp]; }
-                if (!this.isWall(i, j + 1)) { numNeighbors++; neighborSum += this.pressure[idxDown]; }
-
-                // Modified FDTD update accounting for walls
+                // Modified FDTD update using precalculated neighbor count
                 this.newPressure[idx] = (
                     2 * this.pressure[idx] -
                     this.previousPressure[idx] +
                     this.c2dt2_dx2 * (
                         neighborSum -
-                        numNeighbors * this.pressure[idx]
+                        this.nonWallNeighborCount[idx] * this.pressure[idx]
                     )
                 );
 
                 // Apply wall absorption if adjacent to a wall
-                if (this.isWall(i - 1, j) || this.isWall(i + 1, j) ||
-                    this.isWall(i, j - 1) || this.isWall(i, j + 1)) {
+                if (this.nonWallNeighborCount[idx] < 4) {  // If has any wall neighbors
                     this.newPressure[idx] *= (1 - this.wallAbsorption);
                 }
 
@@ -328,5 +345,15 @@ class WaveSimulation {
                 this.warningMessage = null;
             }
         }
+    }
+
+    dispose() {
+        // Clear all array references for garbage collection
+        this.pressure = null;
+        this.previousPressure = null;
+        this.newPressure = null;
+        this.walls = null;
+        this.nonWallNeighborCount = null;
+        this.neighborIndices = null;
     }
 } 

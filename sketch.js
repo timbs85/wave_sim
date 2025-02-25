@@ -16,9 +16,7 @@ function setup() {
 
     // Layout configuration
     const margin = 20;
-    const controlWidth = 200;
     const sliderWidth = 150;
-    const buttonHeight = 30;
     const spacing = 10;
 
     // Create container div for controls
@@ -102,6 +100,9 @@ function setup() {
     resolutionSelect.selected(simResolution);
     resolutionSelect.changed(() => {
         simResolution = parseInt(resolutionSelect.value());
+        if (simulation) {
+            simulation.dispose();  // Clean up old simulation
+        }
         simulation = new WaveSimulation(width, height, simResolution);
     });
     resolutionSelect.parent(resDiv);
