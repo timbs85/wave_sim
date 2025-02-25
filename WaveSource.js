@@ -16,7 +16,6 @@ class WaveSource {
 
         // State
         this.isActive = false;
-        this.warningMessage = null;
     }
 
     setPosition(gridX, gridY, walls) {
@@ -32,23 +31,8 @@ class WaveSource {
         return false;
     }
 
-    setFrequency(freq, walls, c) {
+    setFrequency(freq) {
         this.signal.setFrequency(freq);
-
-        // Calculate wavelength in grid cells
-        const wavelength = c / freq;
-        const wavelengthCells = wavelength / this.dx;
-
-        // Check if wavelength is resolvable on the grid
-        if (wavelengthCells < 8) {
-            this.warningMessage = {
-                text: 'Warning: Frequency too high for grid resolution',
-                timeout: 3
-            };
-        } else {
-            this.warningMessage = null;
-        }
-
         console.log('Source frequency set to:', freq, 'Hz');
     }
 
@@ -127,14 +111,5 @@ class WaveSource {
             pressureField.pressurePrevious[sourceIdx - 1 + this.cols] += sourceValue * diagonalWeight * 0.9;
         if (this.x < this.cols - 1 && this.y < this.rows - 1)
             pressureField.pressurePrevious[sourceIdx + 1 + this.cols] += sourceValue * diagonalWeight * 0.9;
-    }
-
-    updateWarning(dt) {
-        if (this.warningMessage && this.warningMessage.timeout > 0) {
-            this.warningMessage.timeout -= dt;
-            if (this.warningMessage.timeout <= 0) {
-                this.warningMessage = null;
-            }
-        }
     }
 } 

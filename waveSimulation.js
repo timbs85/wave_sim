@@ -51,7 +51,7 @@ class WaveSimulation {
     }
 
     setFrequency(freq) {
-        this.source.setFrequency(freq, this.geometry.getWalls(), this.c);
+        this.source.setFrequency(freq);
     }
 
     setAirAbsorption(value) {
@@ -84,6 +84,8 @@ class WaveSimulation {
     }
 
     dispose() {
-        this.pressureField.dispose();
+        if (this.pressureField) {
+            this.pressureField.dispose();
+        }
     }
 } 

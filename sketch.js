@@ -12,8 +12,6 @@ let buffer; // Pixel buffer for efficient rendering
 let colorLookup; // Color lookup table
 let imageData; // ImageData for direct pixel manipulation
 const PRESSURE_STEPS = 1024; // Number of pre-calculated color values
-let wavelengthCircleOpacity = 0; // Opacity for the wavelength circle
-let wavelengthCircleTimeout = 0; // Timeout for the wavelength circle
 
 // Make simulation globally accessible for GUI
 window.simulation = null;
@@ -166,42 +164,12 @@ function draw() {
     // Update simulation if not paused
     if (!window.paused) {
         simulation.update();
-        simulation.updateWarning();
-
-        // Debug: Check if pressure field has any non-zero values
-        let hasActivity = false;
-        for (let i = 0; i < simulation.cols; i++) {
-            for (let j = 0; j < simulation.rows; j++) {
-                const screenPos = gridToScreen(i, j);
-                if (Math.abs(simulation.getPressure(screenPos.x, screenPos.y)) > 0.001) {
-                    hasActivity = true;
-                    break;
-                }
-            }
-            if (hasActivity) break;
-        }
-        if (!hasActivity) {
-            console.log('No pressure activity detected');
-        }
     }
 
-    // Update source position on mouse click - only if ImGui is not capturing mouse
-    if (mouseIsPressed && mouseY < height && ImGui && !ImGui.GetIO().WantCaptureMouse) {
+    // Update source position on mouse click
+    if (mouseIsPressed && mouseY < height) {
         const gridPos = screenToGrid(mouseX, mouseY);
         simulation.setSource(gridPos.x, gridPos.y);
-        // Show wavelength circle for 3 seconds when source is moved
-        wavelengthCircleOpacity = 255;
-        wavelengthCircleTimeout = 3;
-    }
-
-    // Update wavelength circle opacity
-    if (wavelengthCircleTimeout > 0) {
-        wavelengthCircleTimeout -= simulation.dt;
-        if (wavelengthCircleTimeout <= 0) {
-            wavelengthCircleOpacity = 0;
-        } else if (wavelengthCircleTimeout < 1) {
-            wavelengthCircleOpacity = Math.floor(255 * wavelengthCircleTimeout);
-        }
     }
 
     // Safety check for simulation and its components
@@ -299,56 +267,6 @@ function draw() {
         sourceDiameter
     );
     pop();
-
-    // Draw wavelength circle (if visible)
-    if (wavelengthCircleOpacity > 0) {
-        const wavelengthCells = simulation.c / (simulation.source.frequency * simulation.dx);
-        const radius = wavelengthCells * window.simResolution;
-
-        // Draw dotted circle
-        push();
-        noFill();
-        stroke(255, 255, 0, wavelengthCircleOpacity);
-        strokeWeight(1);
-        drawingContext.setLineDash([5, 5]); // Create dotted line
-        ellipse(
-            screenPos.x,
-            screenPos.y,
-            radius * 2,
-            radius * 2
-        );
-        drawingContext.setLineDash([]); // Reset line style
-        pop();
-    }
-
-    // Draw warning message if exists
-    if (simulation.warningMessage) {
-        // Set up warning message style
-        textAlign(CENTER);
-        textSize(16);
-        const padding = 10;
-        const messageWidth = textWidth(simulation.warningMessage.text) + padding * 2;
-        const messageHeight = 30;
-
-        // Draw warning background in center of screen
-        fill(255, 50, 50, 200);  // Semi-transparent red
-        noStroke();
-        rect(
-            (width - messageWidth) / 2,
-            (height - messageHeight) / 2,
-            messageWidth,
-            messageHeight,
-            5  // Rounded corners
-        );
-
-        // Draw warning text
-        fill(255);  // White text
-        text(
-            simulation.warningMessage.text,
-            width / 2,
-            height / 2
-        );
-    }
 
     // Render ImGui
     if (window.renderGUI) {

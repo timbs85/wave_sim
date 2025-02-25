@@ -150,7 +150,6 @@ function renderGUI() {
 
         // Resolution combo
         const resolutions = [
-            { label: 'Ultra Fast (32px)', value: 32 },
             { label: 'Very Fast (16px)', value: 16 },
             { label: 'Fast (8px)', value: 8 },
             { label: 'Medium (4px)', value: 4 },
