@@ -33,18 +33,18 @@ function initColorLookup() {
 
         // Pressure mode colors
         if (intensity > 0.5) {
-            colorLookup.pressure[idx] = map(intensity, 0.5, 1, 0, 255); // Red
+            colorLookup.pressure[idx] = Math.floor(map(intensity, 0.5, 1, 0, 255)); // Red
             colorLookup.pressure[idx + 1] = 0;  // Green
             colorLookup.pressure[idx + 2] = 0;  // Blue
         } else {
             colorLookup.pressure[idx] = 0;      // Red
             colorLookup.pressure[idx + 1] = 0;  // Green
-            colorLookup.pressure[idx + 2] = map(intensity, 0, 0.5, 255, 0); // Blue
+            colorLookup.pressure[idx + 2] = Math.floor(map(intensity, 0, 0.5, 255, 0)); // Blue
         }
         colorLookup.pressure[idx + 3] = 255;    // Alpha
 
         // Intensity mode colors - use curved pressure for better contrast
-        const gray = map(abs(curvedPressure), 0, 1, 0, 255);
+        const gray = Math.floor(map(Math.abs(curvedPressure), 0, 1, 0, 255));
         colorLookup.intensity[idx] = gray;
         colorLookup.intensity[idx + 1] = gray;
         colorLookup.intensity[idx + 2] = gray;
@@ -58,12 +58,21 @@ function setup() {
     ctx = canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
 
+    // Initialize color lookup table
+    initColorLookup();
+
     // Initialize simulation
     simulation = new WaveSimulation(width, height, simResolution);
 
+    // Set initial source position and trigger an impulse
+    console.log('Setting initial source position...');
+    simulation.setSource(width * 0.25, height * 0.6);  // Position source at 25% from left, 60% from top
+    console.log('Source position set, triggering impulse...');
+    simulation.triggerImpulse();  // Initial impulse to see if simulation is working
+    console.log('Initial impulse triggered');
+
     // Initialize rendering buffers
     imageData = new ImageData(width, height);
-    initColorLookup();
 
     // Layout configuration
     const margin = 20;
@@ -224,6 +233,21 @@ function draw() {
     if (!paused) {
         simulation.update();
         simulation.updateWarning();
+
+        // Debug: Check if pressure field has any non-zero values
+        let hasActivity = false;
+        for (let i = 0; i < simulation.cols; i++) {
+            for (let j = 0; j < simulation.rows; j++) {
+                if (Math.abs(simulation.getPressure(i * simResolution, j * simResolution)) > 0.001) {
+                    hasActivity = true;
+                    break;
+                }
+            }
+            if (hasActivity) break;
+        }
+        if (!hasActivity) {
+            console.log('No pressure activity detected');
+        }
     }
 
     // Update source position on mouse click
@@ -256,7 +280,8 @@ function draw() {
             const y = j * simResolution;
 
             // If this is a wall cell, fill with wall color
-            if (simulation.walls[idx] === 1) {
+            const walls = simulation.geometry.getWalls();
+            if (walls[idx] === 1) {
                 const colorOffset = (PRESSURE_STEPS - 1) * 4;  // Use last color in lookup for walls
                 for (let py = 0; py < simResolution; py++) {
                     const rowOffset = ((y + py) * width + x) * 4;
@@ -273,12 +298,12 @@ function draw() {
 
             // Get pressure values for current cell and neighbors
             const p00 = simulation.getPressure(x, y);
-            const p10 = (i < simulation.cols - 1 && simulation.walls[idx + 1] !== 1) ?
+            const p10 = (i < simulation.cols - 1 && walls[idx + 1] !== 1) ?
                 simulation.getPressure(x + simResolution, y) : p00;
-            const p01 = (j < simulation.rows - 1 && simulation.walls[idx + simulation.cols] !== 1) ?
+            const p01 = (j < simulation.rows - 1 && walls[idx + simulation.cols] !== 1) ?
                 simulation.getPressure(x, y + simResolution) : p00;
             const p11 = (i < simulation.cols - 1 && j < simulation.rows - 1 &&
-                simulation.walls[idx + simulation.cols + 1] !== 1) ?
+                walls[idx + simulation.cols + 1] !== 1) ?
                 simulation.getPressure(x + simResolution, y + simResolution) : p00;
 
             // Fill the pixel region with interpolation
@@ -312,9 +337,22 @@ function draw() {
     // Update the canvas with the new image data
     ctx.putImageData(imageData, 0, 0);
 
+    // Draw source position
+    noFill();
+    stroke(255, 255, 0);
+    const sourceX = simulation.source.x * simResolution;
+    const sourceY = simulation.source.y * simResolution;
+    const sourceDiameter = 8; // Fixed 8-pixel diameter for source circle
+    ellipse(
+        sourceX,
+        sourceY,
+        sourceDiameter,
+        sourceDiameter
+    );
+
     // Draw wavelength circle (if visible)
     if (wavelengthCircleOpacity > 0) {
-        const wavelengthCells = simulation.c / (simulation.frequency * simulation.dx);
+        const wavelengthCells = simulation.c / (simulation.source.frequency * simulation.dx);
         const radius = wavelengthCells * simResolution;
 
         // Draw dotted circle
@@ -324,26 +362,14 @@ function draw() {
         strokeWeight(1);
         drawingContext.setLineDash([5, 5]); // Create dotted line
         ellipse(
-            (simulation.sourceX + 0.5) * simResolution,
-            (simulation.sourceY + 0.5) * simResolution,
+            sourceX,
+            sourceY,
             radius * 2,
             radius * 2
         );
         drawingContext.setLineDash([]); // Reset line style
         pop();
     }
-
-    // Draw source position
-    noFill();
-    stroke(255, 255, 0);
-    const centerX = (simulation.sourceX + 0.5) * simResolution;
-    const centerY = (simulation.sourceY + 0.5) * simResolution;
-    ellipse(
-        centerX,
-        centerY,
-        simResolution * 0.8,
-        simResolution * 0.8
-    );
 
     // Draw warning message if exists
     if (simulation.warningMessage) {
