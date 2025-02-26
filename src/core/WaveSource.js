@@ -5,13 +5,13 @@ class WaveSource {
         this.dx = dx;
 
         // Source parameters
-        this.x = Math.floor(cols * SimConfig.source.defaultX);
-        this.y = Math.floor(rows * SimConfig.source.defaultY);
+        this.x = Math.floor(cols * window.params.source.defaultX);
+        this.y = Math.floor(rows * window.params.source.defaultY);
 
         // Create default signal
         this.signal = new Signal('sine', {
-            frequency: SimConfig.source.defaultFrequency,
-            amplitude: SimConfig.source.defaultAmplitude
+            frequency: window.params.source.defaultFrequency,
+            amplitude: window.params.source.defaultAmplitude
         });
 
         // State

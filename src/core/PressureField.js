@@ -125,7 +125,7 @@ class PressureField {
                 pressureNext[idx] *= (1 - airAbsorption);
 
                 // Clean up small values
-                if (Math.abs(pressureNext[idx]) < SimConfig.physics.minPressureThreshold) {
+                if (Math.abs(pressureNext[idx]) < window.params.physics.minPressureThreshold) {
                     pressureNext[idx] = 0;
                 }
             }

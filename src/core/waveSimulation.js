@@ -8,16 +8,16 @@ class WaveSimulation {
         this.rows = Math.floor(height / cellSize);
 
         // Physical parameters
-        this.c = SimConfig.physics.speedOfSound;
-        this.rho = SimConfig.physics.density; // Air density
-        this.dx = SimConfig.room.physicalWidth / this.cols;
+        this.c = window.params.physics.speedOfSound;
+        this.rho = window.params.physics.density; // Air density
+        this.dx = window.params.room.physicalWidth / this.cols;
 
         // Time step (CFL condition for interleaved scheme)
         this.dt = this.dx / (this.c * Math.sqrt(2));
 
         // Medium properties
-        this.wallAbsorption = SimConfig.medium.defaultWallAbsorption;
-        this.airAbsorption = SimConfig.medium.defaultAirAbsorption;
+        this.wallAbsorption = window.params.controls.wallAbsorption / 100;
+        this.airAbsorption = (window.params.controls.airAbsorption / 100) * window.params.medium.maxAirAbsorption;
 
         // Initialize components
         this.geometry = new RoomGeometry(this.cols, this.rows);
@@ -28,7 +28,7 @@ class WaveSimulation {
         this.isInitialized = false;
     }
 
-    initialize(frequency = SimConfig.source.defaultFrequency) {
+    initialize(frequency = window.params.source.defaultFrequency) {
         // Set initial parameters
         this.source.setFrequency(frequency);
 
@@ -76,7 +76,7 @@ class WaveSimulation {
     }
 
     setAirAbsorption(value) {
-        this.airAbsorption = value * SimConfig.medium.maxAirAbsorption;
+        this.airAbsorption = value * window.params.medium.maxAirAbsorption;
     }
 
     setWallAbsorption(value) {

@@ -7,7 +7,7 @@ class RoomGeometry {
     }
 
     createLayout() {
-        const { leftRoomRatio, roomHeightRatio, corridorRatio, marginRatio } = SimConfig.room;
+        const { leftRoomRatio, roomHeightRatio, corridorRatio, marginRatio } = window.params.room;
 
         // Room dimensions (in grid cells)
         const roomWidth = Math.floor(this.cols * leftRoomRatio);

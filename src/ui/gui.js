@@ -2,18 +2,6 @@
 let initialized = false;
 let imguiCanvas = null;
 
-// Simulation parameters
-const params = {
-    airAbsorption: 80,  // Start with 80%
-    wallAbsorption: 90, // Start with 90%
-    frequency: 440,     // Default to 440 Hz (concert A)
-    contrast: 50,       // Default contrast
-    lowClip: 0,        // Default low clip
-    resolution: 8,      // Default resolution (Fast)
-    visualizationMode: 'pressure', // Default visualization mode
-    paused: false      // Default running state
-};
-
 // Initialize ImGui
 async function initGUI() {
     try {
@@ -59,16 +47,16 @@ async function initGUI() {
         });
 
         // Sync initial state with window variables
-        window.contrastValue = Math.pow(2, ((params.contrast - 1) / 99) * 4);
-        window.lowClipValue = params.lowClip / 100;
-        window.visualizationMode = params.visualizationMode;
-        window.paused = params.paused;
+        window.contrastValue = Math.pow(2, ((window.params.controls.contrast - 1) / 99) * 4);
+        window.lowClipValue = window.params.controls.lowClip / 100;
+        window.visualizationMode = window.params.controls.visualizationMode;
+        window.paused = window.params.controls.paused;
 
         // Set initial simulation parameters if simulation exists
         if (window.simulation) {
-            window.simulation.setAirAbsorption(params.airAbsorption / 100);
-            window.simulation.setWallAbsorption(params.wallAbsorption / 100);
-            window.simulation.setFrequency(params.frequency);
+            window.simulation.setAirAbsorption(window.params.controls.airAbsorption / 100);
+            window.simulation.setWallAbsorption(window.params.controls.wallAbsorption / 100);
+            window.simulation.setFrequency(window.params.controls.frequency);
         }
 
         initialized = true;
@@ -104,46 +92,46 @@ function renderGUI() {
         ImGui.Separator();
 
         // Air absorption slider
-        const airAbs = [params.airAbsorption];
+        const airAbs = [window.params.controls.airAbsorption];
         if (ImGui.SliderFloat("Air Absorption (%)", airAbs, 0.0, 100.0, "%.1f%%")) {
-            params.airAbsorption = airAbs[0];
+            window.params.controls.airAbsorption = airAbs[0];
             if (window.simulation) {
-                window.simulation.setAirAbsorption(params.airAbsorption / 100);
+                window.simulation.setAirAbsorption(window.params.controls.airAbsorption / 100);
             }
         }
 
         // Wall absorption slider
-        const wallAbs = [params.wallAbsorption];
+        const wallAbs = [window.params.controls.wallAbsorption];
         if (ImGui.SliderFloat("Wall Absorption (%)", wallAbs, 0.0, 100.0, "%.1f%%")) {
-            params.wallAbsorption = wallAbs[0];
+            window.params.controls.wallAbsorption = wallAbs[0];
             if (window.simulation) {
-                window.simulation.setWallAbsorption(params.wallAbsorption / 100);
+                window.simulation.setWallAbsorption(window.params.controls.wallAbsorption / 100);
             }
         }
 
         // Frequency slider
-        const freq = [params.frequency];
+        const freq = [window.params.controls.frequency];
         if (ImGui.SliderFloat("Frequency (Hz)", freq, 20.0, 500.0, "%.1f Hz")) {
-            params.frequency = freq[0];
+            window.params.controls.frequency = freq[0];
             if (window.simulation) {
-                window.simulation.setFrequency(params.frequency);
+                window.simulation.setFrequency(window.params.controls.frequency);
             }
         }
 
         // Contrast slider
-        const contrast = [params.contrast];
+        const contrast = [window.params.controls.contrast];
         if (ImGui.SliderFloat("Contrast", contrast, 1.0, 100.0, "%.1f")) {
-            params.contrast = contrast[0];
+            window.params.controls.contrast = contrast[0];
             // Map slider value [1,100] to contrast range [1.0, 15.0] with exponential curve
-            const normalizedValue = (params.contrast - 1) / 99;
+            const normalizedValue = (window.params.controls.contrast - 1) / 99;
             window.contrastValue = Math.pow(2, normalizedValue * 4);
         }
 
         // Low clip slider
-        const lowClip = [params.lowClip];
+        const lowClip = [window.params.controls.lowClip];
         if (ImGui.SliderFloat("Low Clip (%)", lowClip, 0.0, 100.0, "%.1f%%")) {
-            params.lowClip = lowClip[0];
-            window.lowClipValue = params.lowClip / 100;
+            window.params.controls.lowClip = lowClip[0];
+            window.lowClipValue = window.params.controls.lowClip / 100;
         }
 
         ImGui.Separator();
@@ -156,13 +144,13 @@ function renderGUI() {
             { label: 'Fine (2px)', value: 2 }
         ];
 
-        const currentRes = resolutions.find(r => r.value === params.resolution);
+        const currentRes = resolutions.find(r => r.value === window.params.controls.resolution);
         if (ImGui.BeginCombo("Resolution", currentRes.label)) {
             for (const res of resolutions) {
-                if (ImGui.Selectable(res.label, res.value === params.resolution)) {
-                    const oldResolution = params.resolution;
-                    params.resolution = res.value;
-                    window.simResolution = params.resolution;
+                if (ImGui.Selectable(res.label, res.value === window.params.controls.resolution)) {
+                    const oldResolution = window.params.controls.resolution;
+                    window.params.controls.resolution = res.value;
+                    window.simResolution = window.params.controls.resolution;
 
                     if (window.simulation) {
                         const oldSimulation = window.simulation;
@@ -175,12 +163,10 @@ function renderGUI() {
                         oldSimulation.dispose();
 
                         // Create new simulation with new resolution
-                        // Scale the dimensions by the ratio of new to old resolution to maintain same number of cells
-                        const scaleRatio = params.resolution / oldResolution;
                         window.simulation = new WaveSimulation(
-                            800, // Fixed simulation width
-                            600, // Fixed simulation height
-                            params.resolution
+                            window.params.room.width,
+                            window.params.room.height,
+                            window.params.controls.resolution
                         );
 
                         // Calculate new source position based on normalized coordinates
@@ -189,9 +175,9 @@ function renderGUI() {
 
                         // Re-apply all parameters with scaled source position
                         window.simulation.setSource(newSourceX, newSourceY);
-                        window.simulation.setAirAbsorption(params.airAbsorption / 100);
-                        window.simulation.setWallAbsorption(params.wallAbsorption / 100);
-                        window.simulation.setFrequency(params.frequency);
+                        window.simulation.setAirAbsorption(window.params.controls.airAbsorption / 100);
+                        window.simulation.setWallAbsorption(window.params.controls.wallAbsorption / 100);
+                        window.simulation.setFrequency(window.params.controls.frequency);
                         window.simulation.triggerImpulse(); // Trigger an impulse to start the new simulation
 
                         // Update local reference
@@ -215,14 +201,14 @@ function renderGUI() {
 
         ImGui.SameLine();
         if (ImGui.Button("Toggle Visualization", new ImGui.Vec2(buttonWidth, 0))) {
-            params.visualizationMode = params.visualizationMode === 'pressure' ? 'intensity' : 'pressure';
-            window.visualizationMode = params.visualizationMode;
+            window.params.controls.visualizationMode = window.params.controls.visualizationMode === 'pressure' ? 'intensity' : 'pressure';
+            window.visualizationMode = window.params.controls.visualizationMode;
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(params.paused ? "Resume" : "Pause", new ImGui.Vec2(buttonWidth, 0))) {
-            params.paused = !params.paused;
-            window.paused = params.paused;
+        if (ImGui.Button(window.params.controls.paused ? "Resume" : "Pause", new ImGui.Vec2(buttonWidth, 0))) {
+            window.params.controls.paused = !window.params.controls.paused;
+            window.paused = window.params.controls.paused;
         }
 
         ImGui.Separator();
@@ -265,7 +251,7 @@ function renderGUI() {
             const signal = window.simulation.source.signal;
             const points = [];
             const numPoints = 100;
-            const timeScale = 1 / params.frequency; // One period
+            const timeScale = 1 / window.params.controls.frequency; // One period
 
             // Create a temporary signal for visualization
             const tempSignal = new Signal(signal.type, {
