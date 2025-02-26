@@ -24,8 +24,25 @@ class WaveSimulation {
         this.pressureField = new PressureField(this.cols, this.rows);
         this.source = new WaveSource(this.cols, this.rows, this.dx);
 
-        // Precalculate neighbor information
+        // Flag to track initialization state
+        this.isInitialized = false;
+    }
+
+    initialize(frequency = SimConfig.source.defaultFrequency) {
+        // Set initial parameters
+        this.source.setFrequency(frequency);
+
+        // Reset pressure field
+        this.pressureField.reset();
+
+        // Recalculate neighbor information
         this.pressureField.precalculateNeighborInfo(this.geometry.getWalls());
+
+        // Mark as initialized
+        this.isInitialized = true;
+
+        // Trigger the source
+        this.source.trigger();
     }
 
     update() {
@@ -52,6 +69,10 @@ class WaveSimulation {
 
     setFrequency(freq) {
         this.source.setFrequency(freq);
+        // If we haven't initialized yet, don't trigger a reset
+        if (this.isInitialized) {
+            this.triggerImpulse();
+        }
     }
 
     setAirAbsorption(value) {
@@ -63,8 +84,14 @@ class WaveSimulation {
     }
 
     triggerImpulse() {
-        this.source.trigger();
+        // Reset pressure field
         this.pressureField.reset();
+
+        // Recalculate neighbor information
+        this.pressureField.precalculateNeighborInfo(this.geometry.getWalls());
+
+        // Trigger the source
+        this.source.trigger();
     }
 
     getPressure(x, y) {

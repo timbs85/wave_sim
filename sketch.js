@@ -61,11 +61,17 @@ function initColorLookup() {
 }
 
 function setup() {
-    // Create canvas with fixed dimensions
-    const CANVAS_WIDTH = 800;
-    const CANVAS_HEIGHT = 600;
+    // Create canvas with fixed simulation dimensions
+    const SIMULATION_WIDTH = 800;
+    const SIMULATION_HEIGHT = 600;
 
-    p5Canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+    // Get the container dimensions
+    const container = document.getElementById('simulation-container');
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    // Create the canvas with container dimensions
+    p5Canvas = createCanvas(containerWidth, containerHeight);
     p5Canvas.parent('simulation-container');
     ctx = p5Canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
@@ -77,25 +83,31 @@ function setup() {
     // Initialize color lookup table
     initColorLookup();
 
-    // Initialize simulation with fixed dimensions
-    simulation = new WaveSimulation(CANVAS_WIDTH, CANVAS_HEIGHT, window.simResolution);
+    // Initialize simulation with simulation dimensions (internal resolution)
+    simulation = new WaveSimulation(SIMULATION_WIDTH, SIMULATION_HEIGHT, window.simResolution);
     window.simulation = simulation;  // Make accessible to GUI
 
-    // Set initial source position and trigger an impulse
-    const initialPos = screenToGrid(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT * 0.6);
+    // Set initial source position
+    const initialPos = screenToGrid(SIMULATION_WIDTH * 0.25, SIMULATION_HEIGHT * 0.6);
     simulation.setSource(initialPos.x, initialPos.y);
-    simulation.triggerImpulse();
 
-    // Initialize rendering buffers
-    imageData = new ImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
+    // Initialize rendering buffers with simulation grid dimensions
+    const imageWidth = simulation.cols * window.simResolution;
+    const imageHeight = simulation.rows * window.simResolution;
+    imageData = new ImageData(imageWidth, imageHeight);
 
-    // Set initial frequency
-    simulation.setFrequency(440);
+    // Initialize simulation with default frequency
+    simulation.initialize(440);
 }
 
-// Remove window resize handler since we're using fixed dimensions
 function windowResized() {
-    // Do nothing - canvas size is fixed
+    // Get container dimensions
+    const container = document.getElementById('simulation-container');
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    // Resize the canvas to match container
+    resizeCanvas(containerWidth, containerHeight, true);
 }
 
 function getPressureColorIndex(pressure) {
@@ -114,16 +126,42 @@ function getPressureColorIndex(pressure) {
 // Coordinate conversion helpers
 function screenToGrid(screenX, screenY) {
     return {
-        x: Math.floor(screenX / window.simResolution),
-        y: Math.floor(screenY / window.simResolution)
+        x: Math.floor((screenX - window.simResolution * 0.5) / window.simResolution),
+        y: Math.floor((screenY - window.simResolution * 0.5) / window.simResolution)
     };
 }
 
 function gridToScreen(gridX, gridY) {
     return {
-        x: gridX * window.simResolution,  // Sample at grid points
-        y: gridY * window.simResolution   // Sample at grid points
+        x: (gridX + 0.5) * window.simResolution,
+        y: (gridY + 0.5) * window.simResolution
     };
+}
+
+// Convert grid coordinates to pressure field sampling coordinates
+function gridToPressure(gridX, gridY) {
+    return {
+        x: (gridX + 0.5) * window.simResolution, // Sample at cell centers
+        y: (gridY + 0.5) * window.simResolution
+    };
+}
+
+// Convert grid index to grid coordinates
+function indexToGrid(idx, cols) {
+    return {
+        x: idx % cols,
+        y: Math.floor(idx / cols)
+    };
+}
+
+// Convert grid coordinates to grid index
+function gridToIndex(x, y, cols) {
+    return x + y * cols;
+}
+
+// Check if grid coordinates are within bounds
+function isInBounds(x, y, cols, rows) {
+    return x >= 0 && x < cols && y >= 0 && y < rows;
 }
 
 function draw() {
@@ -139,10 +177,19 @@ function draw() {
         simulation.update();
     }
 
-    // Update source position on mouse click
+    // Calculate scale and offset to center the simulation
+    const scaleX = width / simulation.width;
+    const scaleY = height / simulation.height;
+    const scaleFactor = Math.min(scaleX, scaleY);
+    const offsetX = (width - simulation.width * scaleFactor) / 2;
+    const offsetY = (height - simulation.height * scaleFactor) / 2;
+
+    // Update source position on mouse click - adjust for scaling
     if (mouseIsPressed && mouseY < height) {
-        const gridPos = screenToGrid(mouseX, mouseY);
-        simulation.setSource(gridPos.x, gridPos.y);
+        const gridPos = screenToGrid((mouseX - offsetX) / scaleFactor, (mouseY - offsetY) / scaleFactor);
+        if (simulation.setSource(gridPos.x, gridPos.y)) {
+            simulation.triggerImpulse();
+        }
     }
 
     // Safety check for simulation and its components
@@ -157,63 +204,42 @@ function draw() {
     // Update pixel buffer
     for (let i = 0; i < simulation.cols; i++) {
         for (let j = 0; j < simulation.rows; j++) {
-            const idx = i + j * simulation.cols;
-            const screenPos = gridToScreen(i, j);
+            const idx = gridToIndex(i, j, simulation.cols);
+            const pressurePos = gridToPressure(i, j);
 
             // If this is a wall cell, fill with appropriate wall color
             const walls = simulation.geometry.getWalls();
             if (walls[idx] > 0) {
                 const isAnechoic = walls[idx] === 2;
-                const wallColor = isAnechoic ? 32 : 128; // Much darker for anechoic surfaces
-                const wallAlpha = isAnechoic ? 64 : 255; // Semi-transparent for anechoic
+                const wallColor = isAnechoic ? 32 : 128;
+                const wallAlpha = isAnechoic ? 64 : 255;
 
+                const imageWidth = simulation.cols * window.simResolution;
                 for (let py = 0; py < window.simResolution; py++) {
-                    const rowOffset = ((j * window.simResolution + py) * width + i * window.simResolution) * 4;
+                    const rowOffset = ((j * window.simResolution + py) * imageWidth + i * window.simResolution) * 4;
                     for (let px = 0; px < window.simResolution; px++) {
                         const pixelOffset = rowOffset + px * 4;
-                        pixels[pixelOffset] = wallColor;     // Wall color
+                        pixels[pixelOffset] = wallColor;
                         pixels[pixelOffset + 1] = wallColor;
                         pixels[pixelOffset + 2] = wallColor;
-                        pixels[pixelOffset + 3] = wallAlpha; // Make anechoic walls semi-transparent
+                        pixels[pixelOffset + 3] = wallAlpha;
                     }
                 }
-                continue;  // Skip interpolation for wall cells
+                continue;
             }
 
-            // Get pressure values for current cell and neighbors
-            const p00 = simulation.getPressure(screenPos.x, screenPos.y);
+            // Get pressure value for current cell
+            const pressure = simulation.getPressure(pressurePos.x, pressurePos.y);
 
-            // Get neighbor positions in screen space
-            const rightPos = gridToScreen(i + 1, j);
-            const bottomPos = gridToScreen(i, j + 1);
-            const bottomRightPos = gridToScreen(i + 1, j + 1);
+            // Get color for pressure value
+            const lookupIdx = getPressureColorIndex(pressure);
+            const colorOffset = lookupIdx * 4;
 
-            const p10 = (i < simulation.cols - 1 && walls[idx + 1] !== 1) ?
-                simulation.getPressure(rightPos.x, rightPos.y) : p00;
-            const p01 = (j < simulation.rows - 1 && walls[idx + simulation.cols] !== 1) ?
-                simulation.getPressure(bottomPos.x, bottomPos.y) : p00;
-            const p11 = (i < simulation.cols - 1 && j < simulation.rows - 1 &&
-                walls[idx + simulation.cols + 1] !== 1) ?
-                simulation.getPressure(bottomRightPos.x, bottomRightPos.y) : p00;
-
-            // Fill the pixel region with interpolation
+            // Fill the pixel region with the same color (no interpolation)
+            const imageWidth = simulation.cols * window.simResolution;
             for (let py = 0; py < window.simResolution; py++) {
-                const v = py / window.simResolution;
-                const rowOffset = ((j * window.simResolution + py) * width + i * window.simResolution) * 4;
-
+                const rowOffset = ((j * window.simResolution + py) * imageWidth + i * window.simResolution) * 4;
                 for (let px = 0; px < window.simResolution; px++) {
-                    const u = px / window.simResolution;
-
-                    // Bilinear interpolation
-                    const pressure = (1 - u) * (1 - v) * p00 +
-                        u * (1 - v) * p10 +
-                        (1 - u) * v * p01 +
-                        u * v * p11;
-
-                    // Get color for interpolated pressure
-                    const lookupIdx = getPressureColorIndex(pressure);
-                    const colorOffset = lookupIdx * 4;
-
                     const pixelOffset = rowOffset + px * 4;
                     pixels[pixelOffset] = currentLookup[colorOffset];
                     pixels[pixelOffset + 1] = currentLookup[colorOffset + 1];
@@ -224,14 +250,39 @@ function draw() {
         }
     }
 
-    // Update the canvas with the new image data
-    ctx.putImageData(imageData, 0, 0);
+    // Apply transformation for all drawing
+    push();
+    translate(offsetX, offsetY);
+    scale(scaleFactor, scaleFactor);
+
+    // Create a temporary canvas for scaling
+    const tempCanvas = document.createElement('canvas');
+    const imageWidth = simulation.cols * window.simResolution;
+    const imageHeight = simulation.rows * window.simResolution;
+    tempCanvas.width = imageWidth;
+    tempCanvas.height = imageHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.putImageData(imageData, 0, 0);
+
+    // Clear the main canvas
+    clear();
+
+    // Draw the scaled image
+    ctx.save();
+    ctx.resetTransform();
+    ctx.drawImage(
+        tempCanvas,
+        offsetX, offsetY,
+        imageWidth * scaleFactor,
+        imageHeight * scaleFactor
+    );
+    ctx.restore();
 
     // Draw source position
     noFill();
     stroke(255, 255, 0);
     const screenPos = gridToScreen(simulation.source.x, simulation.source.y);
-    const sourceDiameter = Math.max(8, window.simResolution / 2); // Scale source indicator with resolution
+    const sourceDiameter = Math.max(8, window.simResolution / 2);
 
     // Draw source indicator
     push();
@@ -242,6 +293,8 @@ function draw() {
         sourceDiameter,
         sourceDiameter
     );
+    pop();
+
     pop();
 
     // Render ImGui

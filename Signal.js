@@ -87,6 +87,7 @@ class Signal {
 
     reset() {
         this.time = 0;
+        this.phase = 0;  // Reset phase to ensure consistent starting conditions
     }
 
     setFrequency(freq) {

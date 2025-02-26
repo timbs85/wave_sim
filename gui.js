@@ -178,8 +178,8 @@ function renderGUI() {
                         // Scale the dimensions by the ratio of new to old resolution to maintain same number of cells
                         const scaleRatio = params.resolution / oldResolution;
                         window.simulation = new WaveSimulation(
-                            Math.floor(window.width),
-                            Math.floor(window.height),
+                            800, // Fixed simulation width
+                            600, // Fixed simulation height
                             params.resolution
                         );
 
@@ -192,6 +192,7 @@ function renderGUI() {
                         window.simulation.setAirAbsorption(params.airAbsorption / 100);
                         window.simulation.setWallAbsorption(params.wallAbsorption / 100);
                         window.simulation.setFrequency(params.frequency);
+                        window.simulation.triggerImpulse(); // Trigger an impulse to start the new simulation
 
                         // Update local reference
                         simulation = window.simulation;
@@ -223,6 +224,85 @@ function renderGUI() {
             params.paused = !params.paused;
             window.paused = params.paused;
         }
+
+        ImGui.Separator();
+
+        // Signal Graph
+        const graphWidth = ImGui.GetContentRegionAvail().x;
+        const graphHeight = 100;
+        const graphPos = ImGui.GetCursorScreenPos();
+        const drawList = ImGui.GetWindowDrawList();
+
+        // Draw graph background
+        drawList.AddRectFilled(
+            graphPos,
+            new ImGui.Vec2(graphPos.x + graphWidth, graphPos.y + graphHeight),
+            ImGui.COL32(30, 30, 30, 255)
+        );
+
+        // Draw grid lines
+        const gridColor = ImGui.COL32(50, 50, 50, 255);
+        const numVerticalLines = 10;
+        for (let i = 1; i < numVerticalLines; i++) {
+            const x = graphPos.x + (graphWidth * i) / numVerticalLines;
+            drawList.AddLine(
+                new ImGui.Vec2(x, graphPos.y),
+                new ImGui.Vec2(x, graphPos.y + graphHeight),
+                gridColor
+            );
+        }
+        for (let i = 1; i < 4; i++) {
+            const y = graphPos.y + (graphHeight * i) / 4;
+            drawList.AddLine(
+                new ImGui.Vec2(graphPos.x, y),
+                new ImGui.Vec2(graphPos.x + graphWidth, y),
+                gridColor
+            );
+        }
+
+        // Draw signal waveform
+        if (window.simulation && window.simulation.source && window.simulation.source.signal) {
+            const signal = window.simulation.source.signal;
+            const points = [];
+            const numPoints = 100;
+            const timeScale = 1 / params.frequency; // One period
+
+            // Create a temporary signal for visualization
+            const tempSignal = new Signal(signal.type, {
+                frequency: signal.frequency,
+                amplitude: signal.amplitude,
+                phase: signal.phase,
+                pulseWidth: signal.pulseWidth,
+                harmonics: signal.harmonics
+            });
+
+            for (let i = 0; i < numPoints; i++) {
+                const t = (i / numPoints) * timeScale;
+                const value = tempSignal.getValue(t);
+                const x = graphPos.x + (i / numPoints) * graphWidth;
+                const y = graphPos.y + (0.5 - value * 0.45) * graphHeight; // Increased vertical scale
+                points.push(new ImGui.Vec2(x, y));
+            }
+
+            // Draw zero line
+            drawList.AddLine(
+                new ImGui.Vec2(graphPos.x, graphPos.y + graphHeight * 0.5),
+                new ImGui.Vec2(graphPos.x + graphWidth, graphPos.y + graphHeight * 0.5),
+                ImGui.COL32(100, 100, 100, 255)
+            );
+
+            // Draw the waveform
+            for (let i = 0; i < points.length - 1; i++) {
+                drawList.AddLine(
+                    points[i],
+                    points[i + 1],
+                    ImGui.COL32(255, 255, 0, 255),
+                    1.5
+                );
+            }
+        }
+
+        ImGui.Dummy(new ImGui.Vec2(0, graphHeight + 10)); // Add space after the graph
 
         ImGui.End();
 

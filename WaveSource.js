@@ -18,15 +18,12 @@ class WaveSource {
         this.isActive = false;
     }
 
-    setPosition(gridX, gridY, walls) {
-        // Check if position is valid (not in a wall and within bounds)
-        if (gridX >= 0 && gridX < this.cols && gridY >= 0 && gridY < this.rows) {
-            const idx = gridX + gridY * this.cols;
-            if (!walls[idx]) {
-                this.x = gridX;
-                this.y = gridY;
-                return true;
-            }
+    setPosition(x, y) {
+        // Ensure coordinates are within grid bounds
+        if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) {
+            this.x = Math.floor(x);
+            this.y = Math.floor(y);
+            return true;
         }
         return false;
     }
