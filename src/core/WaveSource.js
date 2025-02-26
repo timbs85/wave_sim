@@ -1,17 +1,17 @@
 class WaveSource {
-    constructor(cols, rows, dx) {
-        this.cols = cols;
-        this.rows = rows;
-        this.dx = dx;
+    constructor(params) {
+        this.cols = params.cols;
+        this.rows = params.rows;
+        this.dx = params.dx;
 
         // Source parameters
-        this.x = Math.floor(cols * window.params.source.defaultX);
-        this.y = Math.floor(rows * window.params.source.defaultY);
+        this.x = params.x;
+        this.y = params.y;
 
         // Create default signal
         this.signal = new Signal('sine', {
-            frequency: window.params.source.defaultFrequency,
-            amplitude: window.params.source.defaultAmplitude
+            frequency: params.frequency,
+            amplitude: params.amplitude
         });
 
         // State

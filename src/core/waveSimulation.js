@@ -1,31 +1,56 @@
 class WaveSimulation {
-    constructor(width, height, cellSize = 2) {
+    constructor(params) {
         // Grid dimensions
-        this.width = width;
-        this.height = height;
-        this.cellSize = cellSize;
-        this.cols = Math.floor(width / cellSize);
-        this.rows = Math.floor(height / cellSize);
+        this.width = params.room.width;
+        this.height = params.room.height;
+        this.cellSize = params.controls.resolution;
+        this.cols = Math.floor(this.width / this.cellSize);
+        this.rows = Math.floor(this.height / this.cellSize);
 
-        // Physical parameters
-        this.c = window.params.physics.speedOfSound;
-        this.rho = window.params.physics.density; // Air density
-        this.dx = window.params.room.physicalWidth / this.cols;
+        // Store physics parameters
+        this.setPhysicsParams(params.physics);
 
-        // Time step (CFL condition for interleaved scheme)
+        // Calculate derived values
+        this.dx = params.room.physicalWidth / this.cols;
         this.dt = this.dx / (this.c * Math.sqrt(2));
 
+        // Initialize components with only needed params
+        this.geometry = new RoomGeometry(
+            this.cols,
+            this.rows,
+            params.room
+        );
+
+        this.pressureField = new PressureField(
+            this.cols,
+            this.rows,
+            params.physics.minPressureThreshold
+        );
+
+        this.source = new WaveSource({
+            cols: this.cols,
+            rows: this.rows,
+            dx: this.dx,
+            frequency: params.source.defaultFrequency,
+            amplitude: params.source.defaultAmplitude,
+            x: Math.floor(this.cols * params.source.defaultX),
+            y: Math.floor(this.rows * params.source.defaultY)
+        });
+
         // Medium properties
-        this.wallAbsorption = window.params.controls.wallAbsorption / 100;
-        this.airAbsorption = (window.params.controls.airAbsorption / 100) * window.params.medium.maxAirAbsorption;
+        this.setMediumParams(params.controls, params.medium);
 
-        // Initialize components
-        this.geometry = new RoomGeometry(this.cols, this.rows);
-        this.pressureField = new PressureField(this.cols, this.rows);
-        this.source = new WaveSource(this.cols, this.rows, this.dx);
-
-        // Flag to track initialization state
         this.isInitialized = false;
+    }
+
+    setPhysicsParams(physics) {
+        this.c = physics.speedOfSound;
+        this.rho = physics.density;
+    }
+
+    setMediumParams(controls, medium) {
+        this.wallAbsorption = controls.wallAbsorption / 100;
+        this.airAbsorption = (controls.airAbsorption / 100) * medium.maxAirAbsorption;
     }
 
     initialize(frequency = window.params.source.defaultFrequency) {
@@ -69,14 +94,13 @@ class WaveSimulation {
 
     setFrequency(freq) {
         this.source.setFrequency(freq);
-        // If we haven't initialized yet, don't trigger a reset
         if (this.isInitialized) {
             this.triggerImpulse();
         }
     }
 
-    setAirAbsorption(value) {
-        this.airAbsorption = value * window.params.medium.maxAirAbsorption;
+    setAirAbsorption(value, maxAirAbsorption) {
+        this.airAbsorption = value * maxAirAbsorption;
     }
 
     setWallAbsorption(value) {

@@ -1,137 +1,288 @@
 // GUI state
-let initialized = false;
-let imguiCanvas = null;
-
-// Initialize ImGui
-async function initGUI() {
-    try {
-        console.log('Initializing ImGui...');
-
-        // Create and setup canvas
-        imguiCanvas = document.createElement('canvas');
-        const container = document.getElementById('controls-container');
-        imguiCanvas.width = container.clientWidth;
-        imguiCanvas.height = container.clientHeight;
-        imguiCanvas.style.position = 'absolute';
-        imguiCanvas.style.top = '0';
-        imguiCanvas.style.left = '0';
-        imguiCanvas.style.width = '100%';
-        imguiCanvas.style.height = '100%';
-        document.getElementById('imgui-container').appendChild(imguiCanvas);
-
-        // Initialize ImGui
-        await ImGui.default();
-
-        // Create context
-        const ctx = ImGui.CreateContext();
-        ImGui.SetCurrentContext(ctx);
-
-        // Setup style
-        ImGui.StyleColorsDark();
-        const style = ImGui.GetStyle();
-        style.WindowRounding = 0;
-        style.WindowBorderSize = 0;
-        style.WindowPadding = new ImGui.Vec2(10, 10);
-
-        // Init implementation
-        const gl = imguiCanvas.getContext('webgl2', { alpha: true }) ||
-            imguiCanvas.getContext('webgl', { alpha: true });
-        ImGui_Impl.Init(gl);
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            const container = document.getElementById('controls-container');
-            imguiCanvas.width = container.clientWidth;
-            imguiCanvas.height = container.clientHeight;
-            gl.viewport(0, 0, imguiCanvas.width, imguiCanvas.height);
-        });
-
-        // Sync initial state with window variables
-        window.contrastValue = Math.pow(2, ((window.params.controls.contrast - 1) / 99) * 4);
-        window.lowClipValue = window.params.controls.lowClip / 100;
-        window.visualizationMode = window.params.controls.visualizationMode;
-        window.paused = window.params.controls.paused;
-
-        // Set initial simulation parameters if simulation exists
-        if (window.simulation) {
-            window.simulation.setAirAbsorption(window.params.controls.airAbsorption / 100);
-            window.simulation.setWallAbsorption(window.params.controls.wallAbsorption / 100);
-            window.simulation.setFrequency(window.params.controls.frequency);
-        }
-
-        initialized = true;
-        console.log('ImGui initialization completed');
-    } catch (error) {
-        console.error('Error initializing ImGui:', error);
-        throw error;
+class GUI {
+    constructor() {
+        this.params = this.loadParams();
+        this.initialized = false;
+        this.imguiCanvas = null;
     }
-}
 
-// Render GUI
-function renderGUI() {
-    if (!initialized) return;
+    loadParams() {
+        try {
+            const saved = localStorage.getItem('wave-sim-params');
+            const params = saved ? JSON.parse(saved) : window.params;
+            // Ensure all required parameters exist by merging with defaults
+            return {
+                ...window.params,  // Start with defaults
+                ...params,         // Override with saved values
+                // Ensure nested objects are properly merged
+                controls: {
+                    ...window.params.controls,
+                    ...(params.controls || {})
+                },
+                physics: {
+                    ...window.params.physics,
+                    ...(params.physics || {})
+                },
+                room: {
+                    ...window.params.room,
+                    ...(params.room || {})
+                },
+                medium: {
+                    ...window.params.medium,
+                    ...(params.medium || {})
+                },
+                source: {
+                    ...window.params.source,
+                    ...(params.source || {})
+                }
+            };
+        } catch (e) {
+            console.warn('Failed to load params, using defaults:', e);
+            return window.params;
+        }
+    }
 
-    try {
+    saveParams() {
+        try {
+            localStorage.setItem('wave-sim-params', JSON.stringify(this.params));
+        } catch (e) {
+            console.warn('Failed to save params:', e);
+        }
+    }
+
+    exportParams() {
+        const dataStr = JSON.stringify(this.params, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'wave-sim-params.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    async importParams() {
+        return new Promise((resolve) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    const text = await file.text();
+                    const newParams = JSON.parse(text);
+
+                    // Merge with defaults to ensure all required parameters exist
+                    this.params = {
+                        ...window.params,
+                        ...newParams,
+                        controls: {
+                            ...window.params.controls,
+                            ...(newParams.controls || {})
+                        },
+                        physics: {
+                            ...window.params.physics,
+                            ...(newParams.physics || {})
+                        },
+                        room: {
+                            ...window.params.room,
+                            ...(newParams.room || {})
+                        },
+                        medium: {
+                            ...window.params.medium,
+                            ...(newParams.medium || {})
+                        },
+                        source: {
+                            ...window.params.source,
+                            ...(newParams.source || {})
+                        }
+                    };
+
+                    // Save to localStorage
+                    this.saveParams();
+
+                    // Stop and dispose current simulation
+                    if (window.simManager) {
+                        window.simManager.dispose();
+                    }
+
+                    // Create new simulation manager with new parameters
+                    window.simManager = new SimulationManager(this.params);
+                    window.simulation = window.simManager.simulation;
+
+                    // Initialize and start
+                    window.simulation.initialize(this.params.controls.frequency);
+                    window.simManager.start();
+
+                    resolve(true);
+                } catch (error) {
+                    console.error('Failed to import parameters:', error);
+                    resolve(false);
+                }
+            };
+
+            input.click();
+        });
+    }
+
+    async init() {
+        try {
+            console.log('Initializing ImGui...');
+
+            // Create and setup canvas
+            this.imguiCanvas = document.createElement('canvas');
+            const container = document.getElementById('controls-container');
+            this.imguiCanvas.width = container.clientWidth;
+            this.imguiCanvas.height = container.clientHeight;
+            this.imguiCanvas.style.position = 'absolute';
+            this.imguiCanvas.style.top = '0';
+            this.imguiCanvas.style.left = '0';
+            this.imguiCanvas.style.width = '100%';
+            this.imguiCanvas.style.height = '100%';
+            document.getElementById('imgui-container').appendChild(this.imguiCanvas);
+
+            // Initialize ImGui
+            await ImGui.default();
+
+            // Create context
+            const ctx = ImGui.CreateContext();
+            ImGui.SetCurrentContext(ctx);
+
+            // Enable ini file persistence
+            const io = ImGui.GetIO();
+            io.IniFilename = "imgui.ini";  // Set to null to disable persistence
+
+            // Setup style
+            ImGui.StyleColorsDark();
+            const style = ImGui.GetStyle();
+            style.WindowRounding = 0;
+            style.WindowBorderSize = 0;
+
+            // Init implementation
+            const gl = this.imguiCanvas.getContext('webgl2', { alpha: true }) ||
+                this.imguiCanvas.getContext('webgl', { alpha: true });
+            ImGui_Impl.Init(gl);
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                const container = document.getElementById('controls-container');
+                this.imguiCanvas.width = container.clientWidth;
+                this.imguiCanvas.height = container.clientHeight;
+                gl.viewport(0, 0, this.imguiCanvas.width, this.imguiCanvas.height);
+            });
+
+            // Wait for simulation manager to be initialized
+            const waitForSimManager = () => {
+                return new Promise((resolve) => {
+                    const check = () => {
+                        if (window.simManager) {
+                            resolve();
+                        } else {
+                            setTimeout(check, 100);
+                        }
+                    };
+                    check();
+                });
+            };
+
+            // Wait for simulation manager
+            await waitForSimManager();
+
+            // Initialize GUI state from simulation
+            window.simulation = window.simManager.simulation;
+            window.visualizationMode = this.params.controls.visualizationMode;
+            window.paused = this.params.controls.paused;
+            window.contrastValue = Math.pow(2, (this.params.controls.contrast - 1) / 99 * 4);
+            window.lowClipValue = this.params.controls.lowClip / 100;
+            window.simResolution = this.params.controls.resolution;
+
+            this.initialized = true;
+            console.log('ImGui initialization completed');
+        } catch (error) {
+            console.error('Error initializing ImGui:', error);
+            throw error;
+        }
+    }
+
+    render() {
+        if (!this.initialized) return;
+
         ImGui_Impl.NewFrame();
         ImGui.NewFrame();
 
-        // Main control window - Set to fill the entire controls container
         const windowFlags = ImGui.WindowFlags.NoCollapse |
             ImGui.WindowFlags.NoMove |
             ImGui.WindowFlags.NoResize |
             ImGui.WindowFlags.NoBringToFrontOnFocus |
-            ImGui.WindowFlags.NoTitleBar;  // Remove title bar for full width
+            ImGui.WindowFlags.NoTitleBar;
 
         ImGui.SetNextWindowPos(new ImGui.Vec2(0, 0));
-        ImGui.SetNextWindowSize(new ImGui.Vec2(imguiCanvas.width, imguiCanvas.height));
+        ImGui.SetNextWindowSize(new ImGui.Vec2(this.imguiCanvas.width, this.imguiCanvas.height));
 
         ImGui.Begin("Wave Simulation Controls", null, windowFlags);
 
         // Add a custom title since we removed the title bar
         ImGui.Text("Wave Simulation Controls");
+
+        // Add import/export buttons
+        const importExportButtonWidth = ImGui.GetContentRegionAvail().x / 2 - 5;
+        if (ImGui.Button("Export Parameters", new ImGui.Vec2(importExportButtonWidth, 0))) {
+            this.exportParams();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Import Parameters", new ImGui.Vec2(importExportButtonWidth, 0))) {
+            this.importParams();
+        }
+
         ImGui.Separator();
 
         // Air absorption slider
-        const airAbs = [window.params.controls.airAbsorption];
+        const airAbs = [this.params.controls.airAbsorption];
         if (ImGui.SliderFloat("Air Absorption (%)", airAbs, 0.0, 100.0, "%.1f%%")) {
-            window.params.controls.airAbsorption = airAbs[0];
-            if (window.simulation) {
-                window.simulation.setAirAbsorption(window.params.controls.airAbsorption / 100);
-            }
+            this.params.controls.airAbsorption = airAbs[0];
+            window.simulation.setAirAbsorption(
+                airAbs[0] / 100,
+                this.params.medium.maxAirAbsorption
+            );
+            this.saveParams();
         }
 
         // Wall absorption slider
-        const wallAbs = [window.params.controls.wallAbsorption];
+        const wallAbs = [this.params.controls.wallAbsorption];
         if (ImGui.SliderFloat("Wall Absorption (%)", wallAbs, 0.0, 100.0, "%.1f%%")) {
-            window.params.controls.wallAbsorption = wallAbs[0];
-            if (window.simulation) {
-                window.simulation.setWallAbsorption(window.params.controls.wallAbsorption / 100);
-            }
+            this.params.controls.wallAbsorption = wallAbs[0];
+            window.simulation.setWallAbsorption(wallAbs[0] / 100);
+            this.saveParams();
         }
 
         // Frequency slider
-        const freq = [window.params.controls.frequency];
+        const freq = [this.params.controls.frequency];
         if (ImGui.SliderFloat("Frequency (Hz)", freq, 20.0, 500.0, "%.1f Hz")) {
-            window.params.controls.frequency = freq[0];
-            if (window.simulation) {
-                window.simulation.setFrequency(window.params.controls.frequency);
-            }
+            this.params.controls.frequency = freq[0];
+            window.simulation.setFrequency(freq[0]);
+            this.saveParams();
         }
 
         // Contrast slider
-        const contrast = [window.params.controls.contrast];
+        const contrast = [this.params.controls.contrast];
         if (ImGui.SliderFloat("Contrast", contrast, 1.0, 100.0, "%.1f")) {
-            window.params.controls.contrast = contrast[0];
+            this.params.controls.contrast = contrast[0];
             // Map slider value [1,100] to contrast range [1.0, 15.0] with exponential curve
-            const normalizedValue = (window.params.controls.contrast - 1) / 99;
+            const normalizedValue = (this.params.controls.contrast - 1) / 99;
             window.contrastValue = Math.pow(2, normalizedValue * 4);
         }
 
         // Low clip slider
-        const lowClip = [window.params.controls.lowClip];
+        const lowClip = [this.params.controls.lowClip];
         if (ImGui.SliderFloat("Low Clip (%)", lowClip, 0.0, 100.0, "%.1f%%")) {
-            window.params.controls.lowClip = lowClip[0];
-            window.lowClipValue = window.params.controls.lowClip / 100;
+            this.params.controls.lowClip = lowClip[0];
+            window.lowClipValue = this.params.controls.lowClip / 100;
         }
 
         ImGui.Separator();
@@ -144,44 +295,16 @@ function renderGUI() {
             { label: 'Fine (2px)', value: 2 }
         ];
 
-        const currentRes = resolutions.find(r => r.value === window.params.controls.resolution);
+        const currentRes = resolutions.find(r => r.value === this.params.controls.resolution);
         if (ImGui.BeginCombo("Resolution", currentRes.label)) {
             for (const res of resolutions) {
-                if (ImGui.Selectable(res.label, res.value === window.params.controls.resolution)) {
-                    const oldResolution = window.params.controls.resolution;
-                    window.params.controls.resolution = res.value;
-                    window.simResolution = window.params.controls.resolution;
-
+                if (ImGui.Selectable(res.label, res.value === this.params.controls.resolution)) {
                     if (window.simulation) {
-                        const oldSimulation = window.simulation;
-
-                        // Calculate normalized source position (0-1 range)
-                        const sourceNormalizedX = oldSimulation.source.x / oldSimulation.cols;
-                        const sourceNormalizedY = oldSimulation.source.y / oldSimulation.rows;
-
-                        // Dispose old simulation
-                        oldSimulation.dispose();
-
-                        // Create new simulation with new resolution
-                        window.simulation = new WaveSimulation(
-                            window.params.room.width,
-                            window.params.room.height,
-                            window.params.controls.resolution
-                        );
-
-                        // Calculate new source position based on normalized coordinates
-                        const newSourceX = Math.floor(sourceNormalizedX * window.simulation.cols);
-                        const newSourceY = Math.floor(sourceNormalizedY * window.simulation.rows);
-
-                        // Re-apply all parameters with scaled source position
-                        window.simulation.setSource(newSourceX, newSourceY);
-                        window.simulation.setAirAbsorption(window.params.controls.airAbsorption / 100);
-                        window.simulation.setWallAbsorption(window.params.controls.wallAbsorption / 100);
-                        window.simulation.setFrequency(window.params.controls.frequency);
-                        window.simulation.triggerImpulse(); // Trigger an impulse to start the new simulation
-
-                        // Update local reference
-                        simulation = window.simulation;
+                        // Use the safe resolution change method
+                        window.simulation = window.simManager.changeResolution(res.value);
+                        this.params.controls.resolution = res.value;
+                        window.simResolution = res.value;
+                        this.saveParams();
                     }
                 }
             }
@@ -201,14 +324,14 @@ function renderGUI() {
 
         ImGui.SameLine();
         if (ImGui.Button("Toggle Visualization", new ImGui.Vec2(buttonWidth, 0))) {
-            window.params.controls.visualizationMode = window.params.controls.visualizationMode === 'pressure' ? 'intensity' : 'pressure';
-            window.visualizationMode = window.params.controls.visualizationMode;
+            this.params.controls.visualizationMode = this.params.controls.visualizationMode === 'pressure' ? 'intensity' : 'pressure';
+            window.visualizationMode = this.params.controls.visualizationMode;
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(window.params.controls.paused ? "Resume" : "Pause", new ImGui.Vec2(buttonWidth, 0))) {
-            window.params.controls.paused = !window.params.controls.paused;
-            window.paused = window.params.controls.paused;
+        if (ImGui.Button(this.params.controls.paused ? "Resume" : "Pause", new ImGui.Vec2(buttonWidth, 0))) {
+            this.params.controls.paused = !this.params.controls.paused;
+            window.paused = this.params.controls.paused;
         }
 
         ImGui.Separator();
@@ -251,7 +374,7 @@ function renderGUI() {
             const signal = window.simulation.source.signal;
             const points = [];
             const numPoints = 100;
-            const timeScale = 1 / window.params.controls.frequency; // One period
+            const timeScale = 1 / this.params.controls.frequency; // One period
 
             // Create a temporary signal for visualization
             const tempSignal = new Signal(signal.type, {
@@ -291,17 +414,14 @@ function renderGUI() {
         ImGui.Dummy(new ImGui.Vec2(0, graphHeight + 10)); // Add space after the graph
 
         ImGui.End();
-
-        // Render
         ImGui.Render();
         ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
-    } catch (error) {
-        console.error('Error in render:', error);
     }
 }
 
 // Initialize GUI
-initGUI().catch(console.error);
+const gui = new GUI();
+gui.init().catch(console.error);
 
 // Export for p5.js
-window.renderGUI = renderGUI; 
+window.renderGUI = () => gui.render(); 

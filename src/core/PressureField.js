@@ -1,7 +1,9 @@
 class PressureField {
-    constructor(cols, rows) {
+    constructor(cols, rows, minPressureThreshold) {
         this.cols = cols;
         this.rows = rows;
+        this.minPressureThreshold = minPressureThreshold;
+        this.disposed = false;  // Initialize disposal flag
         const gridSize = cols * rows;
 
         // Store two time steps of pressure (current and previous)
@@ -12,6 +14,10 @@ class PressureField {
         this.neighborIndices = new Int32Array(gridSize * 5);
     }
 
+    gridToIndex(x, y) {
+        return x + y * this.cols;
+    }
+
     reset() {
         // Ensure both pressure arrays are completely zeroed
         this.pressureCurrent.fill(0);
@@ -20,6 +26,7 @@ class PressureField {
 
     dispose() {
         // Clear all buffers
+        this.disposed = true;  // Add flag to track disposal
         this.pressureCurrent = null;
         this.pressurePrevious = null;
         this.neighborIndices = null;
@@ -32,7 +39,7 @@ class PressureField {
 
         // Return pressure at grid center if within bounds
         if (gridX >= 0 && gridX < this.cols && gridY >= 0 && gridY < this.rows) {
-            return this.pressureCurrent[gridToIndex(gridX, gridY, this.cols)];
+            return this.pressureCurrent[this.gridToIndex(gridX, gridY)];
         }
         return 0;
     }
@@ -44,10 +51,10 @@ class PressureField {
 
         // Calculate velocity using central differences at grid centers
         if (gridX >= 1 && gridX < this.cols - 1 && gridY >= 1 && gridY < this.rows - 1) {
-            const dx = (this.pressureCurrent[gridToIndex(gridX + 1, gridY, this.cols)] -
-                this.pressureCurrent[gridToIndex(gridX - 1, gridY, this.cols)]) * 0.5;
-            const dy = (this.pressureCurrent[gridToIndex(gridX, gridY + 1, this.cols)] -
-                this.pressureCurrent[gridToIndex(gridX, gridY - 1, this.cols)]) * 0.5;
+            const dx = (this.pressureCurrent[this.gridToIndex(gridX + 1, gridY)] -
+                this.pressureCurrent[this.gridToIndex(gridX - 1, gridY)]) * 0.5;
+            const dy = (this.pressureCurrent[this.gridToIndex(gridX, gridY + 1)] -
+                this.pressureCurrent[this.gridToIndex(gridX, gridY - 1)]) * 0.5;
 
             return Math.sqrt(dx * dx + dy * dy);
         }
@@ -57,15 +64,15 @@ class PressureField {
     precalculateNeighborInfo(walls) {
         for (let i = 1; i < this.cols - 1; i++) {
             for (let j = 1; j < this.rows - 1; j++) {
-                const idx = gridToIndex(i, j, this.cols);
+                const idx = this.gridToIndex(i, j);
                 const baseIdx = idx * 5;
 
                 // Store center and neighbor indices
                 this.neighborIndices[baseIdx] = idx;
-                this.neighborIndices[baseIdx + 1] = gridToIndex(i - 1, j, this.cols);      // Left
-                this.neighborIndices[baseIdx + 2] = gridToIndex(i + 1, j, this.cols);      // Right
-                this.neighborIndices[baseIdx + 3] = gridToIndex(i, j - 1, this.cols);      // Up
-                this.neighborIndices[baseIdx + 4] = gridToIndex(i, j + 1, this.cols);      // Down
+                this.neighborIndices[baseIdx + 1] = this.gridToIndex(i - 1, j);      // Left
+                this.neighborIndices[baseIdx + 2] = this.gridToIndex(i + 1, j);      // Right
+                this.neighborIndices[baseIdx + 3] = this.gridToIndex(i, j - 1);      // Up
+                this.neighborIndices[baseIdx + 4] = this.gridToIndex(i, j + 1);      // Down
             }
         }
     }
@@ -81,7 +88,7 @@ class PressureField {
         // Update interior points using normal wave equation
         for (let j = 1; j < this.rows - 1; j++) {
             for (let i = 1; i < this.cols - 1; i++) {
-                const idx = gridToIndex(i, j, this.cols);
+                const idx = this.gridToIndex(i, j);
 
                 // Skip only regular walls (type 1), let anechoic walls (type 2) participate
                 if (walls[idx] === 1) {
@@ -90,10 +97,10 @@ class PressureField {
                 }
 
                 // Get neighbor indices
-                const leftIdx = gridToIndex(i - 1, j, this.cols);
-                const rightIdx = gridToIndex(i + 1, j, this.cols);
-                const upIdx = gridToIndex(i, j - 1, this.cols);
-                const downIdx = gridToIndex(i, j + 1, this.cols);
+                const leftIdx = this.gridToIndex(i - 1, j);
+                const rightIdx = this.gridToIndex(i + 1, j);
+                const upIdx = this.gridToIndex(i, j - 1);
+                const downIdx = this.gridToIndex(i, j + 1);
 
                 // Normal wave equation
                 const laplacian = (
@@ -125,7 +132,7 @@ class PressureField {
                 pressureNext[idx] *= (1 - airAbsorption);
 
                 // Clean up small values
-                if (Math.abs(pressureNext[idx]) < window.params.physics.minPressureThreshold) {
+                if (Math.abs(pressureNext[idx]) < this.minPressureThreshold) {
                     pressureNext[idx] = 0;
                 }
             }
@@ -137,9 +144,9 @@ class PressureField {
         // Right boundary
         for (let j = 1; j < this.rows - 1; j++) {
             const i = this.cols - 1;
-            const idx = gridToIndex(i, j, this.cols);
+            const idx = this.gridToIndex(i, j);
             if (walls[idx] !== 1) {
-                const prevIdx = gridToIndex(i - 1, j, this.cols);
+                const prevIdx = this.gridToIndex(i - 1, j);
                 pressureNext[idx] = this.pressureCurrent[prevIdx] +
                     absorbCoeff * (pressureNext[prevIdx] - this.pressureCurrent[idx]);
             }
@@ -148,9 +155,9 @@ class PressureField {
         // Left boundary
         for (let j = 1; j < this.rows - 1; j++) {
             const i = 0;
-            const idx = gridToIndex(i, j, this.cols);
+            const idx = this.gridToIndex(i, j);
             if (walls[idx] !== 1) {
-                const nextIdx = gridToIndex(i + 1, j, this.cols);
+                const nextIdx = this.gridToIndex(i + 1, j);
                 pressureNext[idx] = this.pressureCurrent[nextIdx] +
                     absorbCoeff * (pressureNext[nextIdx] - this.pressureCurrent[idx]);
             }
@@ -159,9 +166,9 @@ class PressureField {
         // Bottom boundary
         for (let i = 1; i < this.cols - 1; i++) {
             const j = this.rows - 1;
-            const idx = gridToIndex(i, j, this.cols);
+            const idx = this.gridToIndex(i, j);
             if (walls[idx] !== 1) {
-                const prevIdx = gridToIndex(i, j - 1, this.cols);
+                const prevIdx = this.gridToIndex(i, j - 1);
                 pressureNext[idx] = this.pressureCurrent[prevIdx] +
                     absorbCoeff * (pressureNext[prevIdx] - this.pressureCurrent[idx]);
             }
@@ -170,9 +177,9 @@ class PressureField {
         // Top boundary
         for (let i = 1; i < this.cols - 1; i++) {
             const j = 0;
-            const idx = gridToIndex(i, j, this.cols);
+            const idx = this.gridToIndex(i, j);
             if (walls[idx] !== 1) {
-                const nextIdx = gridToIndex(i, j + 1, this.cols);
+                const nextIdx = this.gridToIndex(i, j + 1);
                 pressureNext[idx] = this.pressureCurrent[nextIdx] +
                     absorbCoeff * (pressureNext[nextIdx] - this.pressureCurrent[idx]);
             }

@@ -1,13 +1,14 @@
 class RoomGeometry {
-    constructor(cols, rows) {
+    constructor(cols, rows, roomParams) {
         this.cols = cols;
         this.rows = rows;
         this.walls = new Uint8Array(cols * rows);
+        this.roomParams = roomParams;
         this.createLayout();
     }
 
     createLayout() {
-        const { leftRoomRatio, roomHeightRatio, corridorRatio, marginRatio } = window.params.room;
+        const { leftRoomRatio, roomHeightRatio, corridorRatio, marginRatio } = this.roomParams;
 
         // Room dimensions (in grid cells)
         const roomWidth = Math.floor(this.cols * leftRoomRatio);
