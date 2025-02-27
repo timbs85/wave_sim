@@ -21,6 +21,47 @@ window.lowClipValue = 0.0;
 window.visualizationMode = 'pressure';
 window.paused = false;
 
+async function initializeSimulation() {
+    const SIMULATION_WIDTH = 800;
+    const SIMULATION_HEIGHT = 600;
+
+    // Initialize simulation with dimensions
+    const simParams = {
+        room: {
+            width: SIMULATION_WIDTH,
+            height: SIMULATION_HEIGHT,
+            physicalWidth: window.params.room.physicalWidth,
+            physicalHeight: window.params.room.physicalHeight,
+            leftRoomRatio: window.params.room.leftRoomRatio,
+            roomHeightRatio: window.params.room.roomHeightRatio,
+            corridorRatio: window.params.room.corridorRatio,
+            marginRatio: window.params.room.marginRatio
+        },
+        physics: window.params.physics,
+        source: window.params.source,
+        medium: window.params.medium,
+        controls: {
+            ...window.params.controls,
+            resolution: window.simResolution
+        }
+    };
+
+    // Create and initialize simulation manager
+    simManager = new SimulationManager(simParams);
+    await simManager.initialize(simParams);  // Wait for initialization to complete
+
+    window.simManager = simManager;
+    window.simulation = simManager.simulation;
+
+    // Initialize rendering buffers
+    const imageWidth = simManager.cols * window.simResolution;
+    const imageHeight = simManager.rows * window.simResolution;
+    imageData = new ImageData(imageWidth, imageHeight);
+
+    // Force a resize to ensure correct scaling after initialization
+    windowResized();
+}
+
 function initColorLookup() {
     colorLookup = {
         pressure: new Uint8Array(PRESSURE_STEPS * 4),
@@ -62,70 +103,24 @@ function initColorLookup() {
 }
 
 function setup() {
-    // Create canvas with fixed simulation dimensions
-    const SIMULATION_WIDTH = 800;
-    const SIMULATION_HEIGHT = 600;
-
-    // Get the container dimensions
+    // Create canvas
     const container = document.getElementById('simulation-container');
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-
-    // Create the canvas with container dimensions
-    p5Canvas = createCanvas(containerWidth, containerHeight);
+    p5Canvas = createCanvas(container.clientWidth, container.clientHeight);
     p5Canvas.parent('simulation-container');
     ctx = p5Canvas.elt.getContext('2d', { willReadFrequently: true });
     pixelDensity(1);
 
-    // Set drawing modes
-    ellipseMode(CENTER);  // Draw circles from their center point
+    // Basic p5.js setup
+    ellipseMode(CENTER);
     noSmooth();
 
     // Initialize color lookup table
     initColorLookup();
 
-    // Initialize simulation with simulation dimensions (internal resolution)
-    const simParams = {
-        room: {
-            width: SIMULATION_WIDTH,
-            height: SIMULATION_HEIGHT,
-            physicalWidth: window.params.room.physicalWidth,
-            physicalHeight: window.params.room.physicalHeight,
-            leftRoomRatio: window.params.room.leftRoomRatio,
-            roomHeightRatio: window.params.room.roomHeightRatio,
-            corridorRatio: window.params.room.corridorRatio,
-            marginRatio: window.params.room.marginRatio
-        },
-        physics: window.params.physics,
-        source: window.params.source,
-        medium: window.params.medium,
-        controls: {
-            ...window.params.controls,
-            resolution: window.simResolution
-        }
-    };
+    // Start async initialization
+    initializeSimulation().catch(console.error);
 
-    // Create simulation manager
-    simManager = new SimulationManager(simParams);
-    window.simManager = simManager;  // Make accessible globally
-    window.simulation = simManager.simulation;  // Make accessible to GUI
-
-    // Set initial source position
-    const initialPos = screenToGrid(SIMULATION_WIDTH * 0.25, SIMULATION_HEIGHT * 0.6);
-    simManager.setSource(initialPos.x, initialPos.y);
-
-    // Initialize rendering buffers with simulation grid dimensions
-    const imageWidth = simManager.cols * window.simResolution;
-    const imageHeight = simManager.rows * window.simResolution;
-    imageData = new ImageData(imageWidth, imageHeight);
-
-    // Initialize simulation with default frequency
-    simManager.simulation.initialize(440);
-
-    // Start the simulation loop
-    simManager.start();
-
-    // Clean up when window unloads
+    // Cleanup handler
     window.addEventListener('unload', () => {
         if (simManager) {
             simManager.dispose();
@@ -134,13 +129,17 @@ function setup() {
 }
 
 function windowResized() {
-    // Get container dimensions
     const container = document.getElementById('simulation-container');
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
+    resizeCanvas(container.clientWidth, container.clientHeight, true);
 
-    // Resize the canvas to match container
-    resizeCanvas(containerWidth, containerHeight, true);
+    // Only recreate image buffer if simulation dimensions have changed
+    if (simManager?.simulation) {
+        const imageWidth = simManager.cols * window.simResolution;
+        const imageHeight = simManager.rows * window.simResolution;
+        if (imageData.width !== imageWidth || imageData.height !== imageHeight) {
+            imageData = new ImageData(imageWidth, imageHeight);
+        }
+    }
 }
 
 function getPressureColorIndex(pressure) {
@@ -156,176 +155,145 @@ function getPressureColorIndex(pressure) {
     return Math.floor(clampedPressure * (PRESSURE_STEPS - 1));
 }
 
-// Coordinate conversion helpers
-function screenToGrid(screenX, screenY) {
+// Scaling and coordinate helpers
+function getDisplayScale() {
+    if (!simManager?.simulation) return 1;
+
+    // Calculate the simulation's actual dimensions in pixels
+    const simWidth = simManager.cols * window.simResolution;
+    const simHeight = simManager.rows * window.simResolution;
+
+    // Calculate scale factors while preserving aspect ratio
+    const containerAspect = width / height;
+    const simAspect = simWidth / simHeight;
+
+    if (containerAspect > simAspect) {
+        // Container is wider than simulation - fit to height
+        return height / simHeight;
+    } else {
+        // Container is taller than simulation - fit to width
+        return width / simWidth;
+    }
+}
+
+function getDisplayOffset() {
+    const scaleFactor = getDisplayScale();
+    const simWidth = simManager.cols * window.simResolution;
+    const simHeight = simManager.rows * window.simResolution;
     return {
-        x: Math.floor((screenX - window.simResolution * 0.5) / window.simResolution),
-        y: Math.floor((screenY - window.simResolution * 0.5) / window.simResolution)
+        x: (width - simWidth * scaleFactor) / 2,
+        y: (height - simHeight * scaleFactor) / 2
     };
 }
 
-function gridToScreen(gridX, gridY) {
+// Convert screen coordinates to simulation grid coordinates
+function screenToSimulation(screenX, screenY) {
+    const { x: offsetX, y: offsetY } = getDisplayOffset();
+    const scaleFactor = getDisplayScale();
     return {
-        x: (gridX + 0.5) * window.simResolution,
-        y: (gridY + 0.5) * window.simResolution
+        x: Math.floor((screenX - offsetX) / (window.simResolution * scaleFactor)),
+        y: Math.floor((screenY - offsetY) / (window.simResolution * scaleFactor))
     };
-}
-
-// Convert grid coordinates to pressure field sampling coordinates
-function gridToPressure(gridX, gridY) {
-    return {
-        x: (gridX + 0.5) * window.simResolution, // Sample at cell centers
-        y: (gridY + 0.5) * window.simResolution
-    };
-}
-
-// Convert grid index to grid coordinates
-function indexToGrid(idx, cols) {
-    return {
-        x: idx % cols,
-        y: Math.floor(idx / cols)
-    };
-}
-
-// Convert grid coordinates to grid index
-function gridToIndex(x, y, cols) {
-    return x + y * cols;
-}
-
-// Check if grid coordinates are within bounds
-function isInBounds(x, y, cols, rows) {
-    return x >= 0 && x < cols && y >= 0 && y < rows;
 }
 
 function draw() {
+    if (!simManager?.simulation?.pressureField || simManager.pressureField.disposed) {
+        return;
+    }
+
     background(0);
 
-    // Safety check for simulation
-    if (!simManager || !simManager.simulation || !simManager.pressureField || simManager.pressureField.disposed) {
-        return;
-    }
+    // Get display parameters using helper functions
+    const scaleFactor = getDisplayScale();
+    const { x: offsetX, y: offsetY } = getDisplayOffset();
 
-    // Calculate scale and offset to center the simulation
-    const scaleX = width / simManager.width;
-    const scaleY = height / simManager.height;
-    const scaleFactor = Math.min(scaleX, scaleY);
-    const offsetX = (width - simManager.width * scaleFactor) / 2;
-    const offsetY = (height - simManager.height * scaleFactor) / 2;
-
-    // Update source position on mouse click - adjust for scaling
+    // Handle mouse input
     if (mouseIsPressed && mouseY < height) {
-        const gridPos = screenToGrid((mouseX - offsetX) / scaleFactor, (mouseY - offsetY) / scaleFactor);
-        if (simManager.setSource(gridPos.x, gridPos.y)) {
-            simManager.triggerImpulse();
+        const simPos = screenToSimulation(mouseX, mouseY);
+        if (simPos.x >= 0 && simPos.x < simManager.cols &&
+            simPos.y >= 0 && simPos.y < simManager.rows) {
+            if (simManager.setSource(simPos.x, simPos.y)) {
+                simManager.triggerImpulse();
+            }
         }
     }
 
-    // Safety check for simulation and its components
-    if (!simManager.geometry || !simManager.geometry.getWalls) {
-        return;
-    }
-
-    // Get the current color lookup table based on mode
+    // Render the simulation
     const currentLookup = colorLookup[window.visualizationMode];
     const pixels = new Uint8Array(imageData.data.buffer);
+    const imageWidth = simManager.cols * window.simResolution;
 
-    // Update pixel buffer
-    for (let i = 0; i < simManager.cols; i++) {
-        for (let j = 0; j < simManager.rows; j++) {
-            const idx = gridToIndex(i, j, simManager.cols);
-            const pressurePos = gridToPressure(i, j);
-
-            // If this is a wall cell, fill with appropriate wall color
+    // Update pixel buffer - working directly in simulation grid coordinates
+    for (let gridY = 0; gridY < simManager.rows; gridY++) {
+        for (let gridX = 0; gridX < simManager.cols; gridX++) {
+            const idx = gridX + gridY * simManager.cols;
             const walls = simManager.geometry.getWalls();
-            if (walls[idx] > 0) {
-                const isAnechoic = walls[idx] === 2;
-                const wallColor = isAnechoic ? 32 : 128;
-                const wallAlpha = isAnechoic ? 64 : 255;
 
-                const imageWidth = simManager.cols * window.simResolution;
-                for (let py = 0; py < window.simResolution; py++) {
-                    const rowOffset = ((j * window.simResolution + py) * imageWidth + i * window.simResolution) * 4;
-                    for (let px = 0; px < window.simResolution; px++) {
-                        const pixelOffset = rowOffset + px * 4;
-                        pixels[pixelOffset] = wallColor;
-                        pixels[pixelOffset + 1] = wallColor;
-                        pixels[pixelOffset + 2] = wallColor;
-                        pixels[pixelOffset + 3] = wallAlpha;
-                    }
-                }
-                continue;
+            // Determine cell color
+            let r, g, b, a;
+            if (walls[idx] > 0) {
+                // Wall cell
+                const isAnechoic = walls[idx] === 2;
+                r = g = b = isAnechoic ? 32 : 128;
+                a = isAnechoic ? 64 : 255;
+            } else {
+                // Pressure cell - use same grid coordinates for pressure sampling
+                const pressure = simManager.getPressure(gridX, gridY);
+                const lookupIdx = getPressureColorIndex(pressure) * 4;
+                r = currentLookup[lookupIdx];
+                g = currentLookup[lookupIdx + 1];
+                b = currentLookup[lookupIdx + 2];
+                a = currentLookup[lookupIdx + 3];
             }
 
-            // Get pressure value for current cell
-            const pressure = simManager.getPressure(pressurePos.x, pressurePos.y);
-
-            // Get color for pressure value
-            const lookupIdx = getPressureColorIndex(pressure);
-            const colorOffset = lookupIdx * 4;
-
-            // Fill the pixel region with the same color (no interpolation)
-            const imageWidth = simManager.cols * window.simResolution;
+            // Fill the cell's pixels
+            const cellStartX = gridX * window.simResolution;
+            const cellStartY = gridY * window.simResolution;
             for (let py = 0; py < window.simResolution; py++) {
-                const rowOffset = ((j * window.simResolution + py) * imageWidth + i * window.simResolution) * 4;
+                const rowOffset = ((cellStartY + py) * imageWidth + cellStartX) * 4;
                 for (let px = 0; px < window.simResolution; px++) {
                     const pixelOffset = rowOffset + px * 4;
-                    pixels[pixelOffset] = currentLookup[colorOffset];
-                    pixels[pixelOffset + 1] = currentLookup[colorOffset + 1];
-                    pixels[pixelOffset + 2] = currentLookup[colorOffset + 2];
-                    pixels[pixelOffset + 3] = currentLookup[colorOffset + 3];
+                    pixels[pixelOffset] = r;
+                    pixels[pixelOffset + 1] = g;
+                    pixels[pixelOffset + 2] = b;
+                    pixels[pixelOffset + 3] = a;
                 }
             }
         }
     }
 
-    // Apply transformation for all drawing
-    push();
-    translate(offsetX, offsetY);
-    scale(scaleFactor, scaleFactor);
-
-    // Create a temporary canvas for scaling
+    // Draw the simulation
     const tempCanvas = document.createElement('canvas');
-    const imageWidth = simManager.cols * window.simResolution;
-    const imageHeight = simManager.rows * window.simResolution;
     tempCanvas.width = imageWidth;
-    tempCanvas.height = imageHeight;
+    tempCanvas.height = simManager.rows * window.simResolution;
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.putImageData(imageData, 0, 0);
 
-    // Clear the main canvas
+    // Clear and draw scaled image
     clear();
-
-    // Draw the scaled image
     ctx.save();
     ctx.resetTransform();
     ctx.drawImage(
         tempCanvas,
         offsetX, offsetY,
         imageWidth * scaleFactor,
-        imageHeight * scaleFactor
+        simManager.rows * window.simResolution * scaleFactor
     );
     ctx.restore();
 
-    // Draw source position
-    noFill();
-    stroke(255, 255, 0);
-    const screenPos = gridToScreen(simManager.source.x, simManager.source.y);
-    const sourceDiameter = Math.max(8, window.simResolution / 2);
-
     // Draw source indicator
     push();
-    strokeWeight(1);
-    ellipse(
-        screenPos.x,
-        screenPos.y,
-        sourceDiameter,
-        sourceDiameter
-    );
+    translate(offsetX, offsetY);
+    scale(scaleFactor);
+    noFill();
+    stroke(255, 255, 0);
+    const sourceX = (simManager.source.x + 0.5) * window.simResolution;
+    const sourceY = (simManager.source.y + 0.5) * window.simResolution;
+    const sourceDiameter = Math.max(8, window.simResolution / 2);
+    ellipse(sourceX, sourceY, sourceDiameter, sourceDiameter);
     pop();
 
-    pop();
-
-    // Render ImGui
+    // Render GUI
     if (window.renderGUI) {
         window.renderGUI();
     }

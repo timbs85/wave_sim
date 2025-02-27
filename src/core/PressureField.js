@@ -32,29 +32,21 @@ class PressureField {
         this.neighborIndices = null;
     }
 
-    getPressure(x, y, cellSize) {
-        // Convert screen coordinates to grid coordinates, sampling at cell centers
-        const gridX = Math.floor(x / cellSize);
-        const gridY = Math.floor(y / cellSize);
-
-        // Return pressure at grid center if within bounds
-        if (gridX >= 0 && gridX < this.cols && gridY >= 0 && gridY < this.rows) {
-            return this.pressureCurrent[this.gridToIndex(gridX, gridY)];
+    getPressure(x, y) {
+        // Already in grid coordinates, just check bounds and return pressure
+        if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) {
+            return this.pressureCurrent[this.gridToIndex(x, y)];
         }
         return 0;
     }
 
-    getVelocity(x, y, cellSize) {
-        // Convert screen coordinates to grid coordinates, sampling at cell centers
-        const gridX = Math.floor(x / cellSize);
-        const gridY = Math.floor(y / cellSize);
-
-        // Calculate velocity using central differences at grid centers
-        if (gridX >= 1 && gridX < this.cols - 1 && gridY >= 1 && gridY < this.rows - 1) {
-            const dx = (this.pressureCurrent[this.gridToIndex(gridX + 1, gridY)] -
-                this.pressureCurrent[this.gridToIndex(gridX - 1, gridY)]) * 0.5;
-            const dy = (this.pressureCurrent[this.gridToIndex(gridX, gridY + 1)] -
-                this.pressureCurrent[this.gridToIndex(gridX, gridY - 1)]) * 0.5;
+    getVelocity(x, y) {
+        // Already in grid coordinates, calculate velocity using central differences
+        if (x >= 1 && x < this.cols - 1 && y >= 1 && y < this.rows - 1) {
+            const dx = (this.pressureCurrent[this.gridToIndex(x + 1, y)] -
+                this.pressureCurrent[this.gridToIndex(x - 1, y)]) * 0.5;
+            const dy = (this.pressureCurrent[this.gridToIndex(x, y + 1)] -
+                this.pressureCurrent[this.gridToIndex(x, y - 1)]) * 0.5;
 
             return Math.sqrt(dx * dx + dy * dy);
         }

@@ -1,10 +1,36 @@
 class SimulationManager {
     constructor(params) {
-        this.simulation = new WaveSimulation(params);
+        this.simulation = null;
         this.isRunning = false;
         this.updateInterval = 1000 / 60; // 60Hz default
         this.intervalId = null;
         this.params = params;  // Store params for recreation
+    }
+
+    async initialize(params) {
+        // Stop any existing simulation
+        this.stop();
+
+        // Dispose of existing simulation if any
+        if (this.simulation) {
+            this.simulation.dispose();
+        }
+
+        // Create new simulation
+        this.simulation = new WaveSimulation(params);
+
+        // Set initial source position
+        const sourceX = Math.floor(this.simulation.cols * params.source.defaultX);
+        const sourceY = Math.floor(this.simulation.rows * params.source.defaultY);
+        this.simulation.setSource(sourceX, sourceY);
+
+        // Initialize with frequency
+        this.simulation.initialize(params.controls.frequency);
+
+        // Start simulation loop
+        this.start();
+
+        return this.simulation;
     }
 
     start() {
