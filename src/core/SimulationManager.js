@@ -19,13 +19,13 @@ class SimulationManager {
         // Create new simulation
         this.simulation = new WaveSimulation(params);
 
+        // Wait for the simulation to initialize
+        await this.simulation.initialize(params.controls.frequency);
+
         // Set initial source position
         const sourceX = Math.floor(this.simulation.cols * params.source.defaultX);
         const sourceY = Math.floor(this.simulation.rows * params.source.defaultY);
         this.simulation.setSource(sourceX, sourceY);
-
-        // Initialize with frequency
-        this.simulation.initialize(params.controls.frequency);
 
         // Start simulation loop
         this.start();
@@ -69,7 +69,7 @@ class SimulationManager {
     }
 
     // Method to safely change resolution
-    changeResolution(newResolution) {
+    async changeResolution(newResolution) {
         // Stop the simulation loop
         this.stop();
 
@@ -87,13 +87,15 @@ class SimulationManager {
         // Create new simulation
         this.simulation = new WaveSimulation(this.params);
 
+        // Wait for the simulation to initialize
+        await this.simulation.initialize(this.params.controls.frequency);
+
         // Calculate new source position based on normalized coordinates
         const newSourceX = Math.floor(sourceNormalizedX * this.simulation.cols);
         const newSourceY = Math.floor(sourceNormalizedY * this.simulation.rows);
 
-        // Set source position and initialize
+        // Set source position
         this.simulation.setSource(newSourceX, newSourceY);
-        this.simulation.initialize(this.params.controls.frequency);
 
         // Restart the simulation loop
         this.start();
@@ -167,4 +169,4 @@ if (typeof module !== 'undefined' && module.exports) {
 
 if (typeof window !== 'undefined') {
     window.SimulationManager = SimulationManager;
-} 
+}

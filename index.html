@@ -31,6 +31,7 @@
             position: relative;
             border-right: 1px solid #333;
             flex-shrink: 0;
+            z-index: 10; /* Ensure controls are above simulation */
         }
 
         #simulation-container {
@@ -44,6 +45,7 @@
             overflow: hidden;
             position: relative;
             width: 100%;
+            z-index: 5;
         }
 
         canvas {
@@ -62,6 +64,8 @@
             left: 0;
             width: 400px;
             height: 100%;
+            z-index: 20; /* Ensure ImGui is on top */
+            pointer-events: auto; /* Explicitly enable pointer events */
         }
 
         #imgui-container canvas {
@@ -70,6 +74,7 @@
             left: 0;
             width: 100% !important;
             height: 100% !important;
+            pointer-events: auto; /* Explicitly enable pointer events */
         }
 
         .wrapper {
@@ -102,6 +107,7 @@
     <script src="src/core/WaveSource.js"></script>
     <script src="src/core/waveSimulation.js"></script>
     <script src="src/core/SimulationManager.js"></script>
+    <script src="src/core/AppManager.js"></script>
 
     <!-- Load GUI and sketch last -->
     <script src="src/ui/gui.js"></script>

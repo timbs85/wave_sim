@@ -104,26 +104,11 @@ class GUI {
                         }
                     };
 
-                    // Save to localStorage
                     this.saveParams();
-
-                    // Stop and dispose current simulation
-                    if (window.simManager) {
-                        window.simManager.dispose();
-                    }
-
-                    // Create new simulation manager with new parameters
-                    window.simManager = new SimulationManager(this.params);
-                    window.simulation = window.simManager.simulation;
-
-                    // Initialize and start
-                    window.simulation.initialize(this.params.controls.frequency);
-                    window.simManager.start();
-
-                    resolve(true);
-                } catch (error) {
-                    console.error('Failed to import parameters:', error);
-                    resolve(false);
+                    resolve(this.params);
+                } catch (e) {
+                    console.error('Error importing parameters:', e);
+                    resolve(null);
                 }
             };
 
@@ -135,67 +120,70 @@ class GUI {
         try {
             console.log('Initializing ImGui...');
 
-            // Create and setup canvas
-            this.imguiCanvas = document.createElement('canvas');
+            // Get the container
             const container = document.getElementById('controls-container');
+            const imguiContainer = document.getElementById('imgui-container');
+            imguiContainer.innerHTML = ''; // Clear any existing content
+
+            // Create a new canvas
+            this.imguiCanvas = document.createElement('canvas');
             this.imguiCanvas.width = container.clientWidth;
             this.imguiCanvas.height = container.clientHeight;
+
+            // Style the canvas
             this.imguiCanvas.style.position = 'absolute';
             this.imguiCanvas.style.top = '0';
             this.imguiCanvas.style.left = '0';
             this.imguiCanvas.style.width = '100%';
             this.imguiCanvas.style.height = '100%';
-            document.getElementById('imgui-container').appendChild(this.imguiCanvas);
+            this.imguiCanvas.style.zIndex = '30';
+            this.imguiCanvas.style.pointerEvents = 'auto';
+            this.imguiCanvas.tabIndex = 1;
+
+            // Add the canvas to the DOM
+            imguiContainer.appendChild(this.imguiCanvas);
+
+            // Focus the canvas
+            this.imguiCanvas.focus();
 
             // Initialize ImGui
             await ImGui.default();
 
-            // Create context
-            const ctx = ImGui.CreateContext();
-            ImGui.SetCurrentContext(ctx);
+            // Create ImGui context
+            ImGui.CreateContext();
 
-            // Enable ini file persistence
+            // Configure ImGui IO
             const io = ImGui.GetIO();
-            io.IniFilename = "imgui.ini";  // Set to null to disable persistence
+            io.IniFilename = "imgui.ini";
+            io.ConfigFlags |= ImGui.ConfigFlags.NavEnableKeyboard;
 
-            // Setup style
+            // Set up style
             ImGui.StyleColorsDark();
             const style = ImGui.GetStyle();
             style.WindowRounding = 0;
             style.WindowBorderSize = 0;
+            style.FontGlobalScale = 1.2;
 
-            // Init implementation
-            const gl = this.imguiCanvas.getContext('webgl2', { alpha: true }) ||
-                this.imguiCanvas.getContext('webgl', { alpha: true });
-            ImGui_Impl.Init(gl);
+            // Initialize ImGui implementation
+            ImGui_Impl.Init(this.imguiCanvas);
+
+            // Add debug event listeners
+            this.imguiCanvas.addEventListener('mousedown', (e) => {
+                console.log('ImGui canvas mousedown event', e.clientX, e.clientY);
+            });
+
+            this.imguiCanvas.addEventListener('click', () => {
+                console.log('ImGui canvas clicked');
+                this.imguiCanvas.focus();
+            });
 
             // Handle window resize
             window.addEventListener('resize', () => {
-                const container = document.getElementById('controls-container');
                 this.imguiCanvas.width = container.clientWidth;
                 this.imguiCanvas.height = container.clientHeight;
-                gl.viewport(0, 0, this.imguiCanvas.width, this.imguiCanvas.height);
             });
 
-            // Wait for simulation manager to be initialized
-            const waitForSimManager = () => {
-                return new Promise((resolve) => {
-                    const check = () => {
-                        if (window.simManager) {
-                            resolve();
-                        } else {
-                            setTimeout(check, 100);
-                        }
-                    };
-                    check();
-                });
-            };
-
-            // Wait for simulation manager
-            await waitForSimManager();
-
             // Initialize GUI state from simulation
-            window.simulation = window.simManager.simulation;
             window.visualizationMode = this.params.controls.visualizationMode;
             window.paused = this.params.controls.paused;
             window.contrastValue = Math.pow(2, (this.params.controls.contrast - 1) / 99 * 4);
@@ -213,31 +201,58 @@ class GUI {
     render() {
         if (!this.initialized) return;
 
-        ImGui_Impl.NewFrame();
-        ImGui.NewFrame();
+        try {
+            // Start a new ImGui frame
+            ImGui_Impl.NewFrame();
+            ImGui.NewFrame();
 
-        const windowFlags = ImGui.WindowFlags.NoCollapse |
-            ImGui.WindowFlags.NoMove |
-            ImGui.WindowFlags.NoResize |
-            ImGui.WindowFlags.NoBringToFrontOnFocus |
-            ImGui.WindowFlags.NoTitleBar;
+            const windowFlags = ImGui.WindowFlags.NoCollapse |
+                ImGui.WindowFlags.NoMove |
+                ImGui.WindowFlags.NoResize |
+                ImGui.WindowFlags.NoTitleBar;
 
-        ImGui.SetNextWindowPos(new ImGui.Vec2(0, 0));
-        ImGui.SetNextWindowSize(new ImGui.Vec2(this.imguiCanvas.width, this.imguiCanvas.height));
+            // Main control panel
+            ImGui.SetNextWindowPos(new ImGui.ImVec2(0, 0));
+            ImGui.SetNextWindowSize(new ImGui.ImVec2(this.imguiCanvas.width, this.imguiCanvas.height));
 
-        ImGui.Begin("Wave Simulation Controls", null, windowFlags);
+            ImGui.Begin("Wave Simulation Controls", null, windowFlags);
 
+            // Only render controls if simulation is available
+            if (window.simManager && window.simulation) {
+                this.renderControls();
+            } else {
+                ImGui.Text("Simulation is being reinitialized...");
+            }
+
+            ImGui.End();
+
+            // Render the ImGui frame
+            ImGui.Render();
+
+            // Render ImGui draw data
+            ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
+        } catch (error) {
+            console.error('Error rendering ImGui:', error);
+        }
+    }
+
+    renderControls() {
         // Add a custom title since we removed the title bar
         ImGui.Text("Wave Simulation Controls");
 
         // Add import/export buttons
         const importExportButtonWidth = ImGui.GetContentRegionAvail().x / 2 - 5;
-        if (ImGui.Button("Export Parameters", new ImGui.Vec2(importExportButtonWidth, 0))) {
+        if (ImGui.Button("Export Parameters", new ImGui.ImVec2(importExportButtonWidth, 0))) {
             this.exportParams();
         }
         ImGui.SameLine();
-        if (ImGui.Button("Import Parameters", new ImGui.Vec2(importExportButtonWidth, 0))) {
-            this.importParams();
+        if (ImGui.Button("Import Parameters", new ImGui.ImVec2(importExportButtonWidth, 0))) {
+            this.importParams().then(async (params) => {
+                if (params && window.appManager) {
+                    // Use the AppManager to reinitialize the simulation
+                    await window.appManager.reinitializeSimulation(this.params);
+                }
+            });
         }
 
         ImGui.Separator();
@@ -299,12 +314,13 @@ class GUI {
         if (ImGui.BeginCombo("Resolution", currentRes.label)) {
             for (const res of resolutions) {
                 if (ImGui.Selectable(res.label, res.value === this.params.controls.resolution)) {
-                    if (window.simulation) {
-                        // Use the safe resolution change method
-                        window.simulation = window.simManager.changeResolution(res.value);
-                        this.params.controls.resolution = res.value;
-                        window.simResolution = res.value;
-                        this.saveParams();
+                    if (window.appManager) {
+                        // Use the AppManager to change resolution
+                        window.appManager.changeResolution(res.value).then(() => {
+                            this.params.controls.resolution = res.value;
+                            window.simResolution = res.value;
+                            this.saveParams();
+                        });
                     }
                 }
             }
@@ -316,20 +332,20 @@ class GUI {
         // Control buttons in a row
         const buttonWidth = ImGui.GetContentRegionAvail().x / 3 - 5;
 
-        if (ImGui.Button("Trigger Impulse", new ImGui.Vec2(buttonWidth, 0))) {
+        if (ImGui.Button("Trigger Impulse", new ImGui.ImVec2(buttonWidth, 0))) {
             if (window.simulation) {
                 window.simulation.triggerImpulse();
             }
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Toggle Visualization", new ImGui.Vec2(buttonWidth, 0))) {
+        if (ImGui.Button("Toggle Visualization", new ImGui.ImVec2(buttonWidth, 0))) {
             this.params.controls.visualizationMode = this.params.controls.visualizationMode === 'pressure' ? 'intensity' : 'pressure';
             window.visualizationMode = this.params.controls.visualizationMode;
         }
 
         ImGui.SameLine();
-        if (ImGui.Button(this.params.controls.paused ? "Resume" : "Pause", new ImGui.Vec2(buttonWidth, 0))) {
+        if (ImGui.Button(this.params.controls.paused ? "Resume" : "Pause", new ImGui.ImVec2(buttonWidth, 0))) {
             this.params.controls.paused = !this.params.controls.paused;
             window.paused = this.params.controls.paused;
         }
@@ -345,7 +361,7 @@ class GUI {
         // Draw graph background
         drawList.AddRectFilled(
             graphPos,
-            new ImGui.Vec2(graphPos.x + graphWidth, graphPos.y + graphHeight),
+            new ImGui.ImVec2(graphPos.x + graphWidth, graphPos.y + graphHeight),
             ImGui.COL32(30, 30, 30, 255)
         );
 
@@ -355,16 +371,16 @@ class GUI {
         for (let i = 1; i < numVerticalLines; i++) {
             const x = graphPos.x + (graphWidth * i) / numVerticalLines;
             drawList.AddLine(
-                new ImGui.Vec2(x, graphPos.y),
-                new ImGui.Vec2(x, graphPos.y + graphHeight),
+                new ImGui.ImVec2(x, graphPos.y),
+                new ImGui.ImVec2(x, graphPos.y + graphHeight),
                 gridColor
             );
         }
         for (let i = 1; i < 4; i++) {
             const y = graphPos.y + (graphHeight * i) / 4;
             drawList.AddLine(
-                new ImGui.Vec2(graphPos.x, y),
-                new ImGui.Vec2(graphPos.x + graphWidth, y),
+                new ImGui.ImVec2(graphPos.x, y),
+                new ImGui.ImVec2(graphPos.x + graphWidth, y),
                 gridColor
             );
         }
@@ -390,13 +406,13 @@ class GUI {
                 const value = tempSignal.getValue(t);
                 const x = graphPos.x + (i / numPoints) * graphWidth;
                 const y = graphPos.y + (0.5 - value * 0.45) * graphHeight; // Increased vertical scale
-                points.push(new ImGui.Vec2(x, y));
+                points.push(new ImGui.ImVec2(x, y));
             }
 
             // Draw zero line
             drawList.AddLine(
-                new ImGui.Vec2(graphPos.x, graphPos.y + graphHeight * 0.5),
-                new ImGui.Vec2(graphPos.x + graphWidth, graphPos.y + graphHeight * 0.5),
+                new ImGui.ImVec2(graphPos.x, graphPos.y + graphHeight * 0.5),
+                new ImGui.ImVec2(graphPos.x + graphWidth, graphPos.y + graphHeight * 0.5),
                 ImGui.COL32(100, 100, 100, 255)
             );
 
@@ -411,11 +427,7 @@ class GUI {
             }
         }
 
-        ImGui.Dummy(new ImGui.Vec2(0, graphHeight + 10)); // Add space after the graph
-
-        ImGui.End();
-        ImGui.Render();
-        ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
+        ImGui.Dummy(new ImGui.ImVec2(0, graphHeight + 10)); // Add space after the graph
     }
 }
 
@@ -424,4 +436,4 @@ const gui = new GUI();
 gui.init().catch(console.error);
 
 // Export for p5.js
-window.renderGUI = () => gui.render(); 
+window.renderGUI = () => gui.render();

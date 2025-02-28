@@ -53,7 +53,7 @@ class WaveSimulation {
         this.airAbsorption = (controls.airAbsorption / 100) * medium.maxAirAbsorption;
     }
 
-    initialize(frequency = window.params.source.defaultFrequency) {
+    async initialize(frequency = window.params.source.defaultFrequency) {
         // Set initial parameters
         this.source.setFrequency(frequency);
 
@@ -68,6 +68,9 @@ class WaveSimulation {
 
         // Trigger the source
         this.source.trigger();
+
+        // Return a resolved promise to ensure async completion
+        return Promise.resolve();
     }
 
     update() {
@@ -107,7 +110,7 @@ class WaveSimulation {
         this.wallAbsorption = value;
     }
 
-    triggerImpulse() {
+    async triggerImpulse() {
         // Reset pressure field
         this.pressureField.reset();
 
@@ -116,6 +119,9 @@ class WaveSimulation {
 
         // Trigger the source
         this.source.trigger();
+
+        // Return a resolved promise to ensure async completion
+        return Promise.resolve();
     }
 
     getPressure(x, y) {
@@ -139,4 +145,4 @@ class WaveSimulation {
             this.pressureField.dispose();
         }
     }
-} 
+}
