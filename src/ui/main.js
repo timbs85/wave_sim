@@ -1,25 +1,17 @@
 /**
- * p5.js sketch for wave simulation
+ * Main entry point for wave simulation
  *
- * This file is now a thin wrapper around the SimulationApp class,
- * which handles the coordination of physics and rendering.
+ * This file initializes the SimulationApp and handles application lifecycle.
+ * It replaces the p5.js sketch.js entry point with a plain JavaScript implementation.
  */
 
 // Global application instance
 let app;
 
-// p5.js setup function - runs once at the beginning
-function setup() {
-    // Create a p5 canvas for compatibility, but we won't use it directly
-    // Our renderer will create its own canvas
-    noCanvas();
-
-    // Disable automatic looping - we'll use requestAnimationFrame
-    noLoop();
-
-    // Initialize the application
+// Initialize the application when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
-}
+});
 
 // Initialize the application
 async function initializeApp() {
@@ -53,21 +45,16 @@ async function initializeApp() {
             }
         });
 
+        // Define p5.js compatibility functions
+        // These are needed for any code that might still expect p5.js functions
+        window.windowResized = () => {
+            if (app) {
+                app.handleResize();
+            }
+        };
+
         console.log('Application initialized successfully');
     } catch (error) {
         console.error('Failed to initialize application:', error);
-    }
-}
-
-// p5.js draw function - not used in our new architecture
-function draw() {
-    // This function is intentionally empty
-    // The rendering is now handled by the SimulationApp class
-    }
-
-// p5.js windowResized function - delegate to app
-function windowResized() {
-    if (app) {
-        app.handleResize();
     }
 }

@@ -1,7 +1,64 @@
 // GUI state
 class GUI {
-    constructor() {
+    constructor(simulationApp = null) {
+        this.simulationApp = simulationApp;
         this.params = this.loadParams();
+
+        // Sync params with simulationApp if available
+        if (this.simulationApp) {
+            // Sync visualization mode
+            this.params.controls.visualizationMode = this.simulationApp.config.visualizationMode;
+
+            // Sync paused state
+            this.params.controls.paused = this.simulationApp.isPaused;
+
+            // Sync renderer settings
+            if (this.simulationApp.renderer) {
+                const settings = this.simulationApp.renderer.getSettings();
+
+                // Convert contrast value back to slider value [1-100]
+                if (settings.contrastValue) {
+                    const normalizedValue = Math.log2(settings.contrastValue) / 4;
+                    this.params.controls.contrast = Math.round(normalizedValue * 99 + 1);
+                }
+
+                // Convert low clip value back to percentage [0-100]
+                if (settings.lowClipValue !== undefined) {
+                    this.params.controls.lowClip = Math.round(settings.lowClipValue * 100);
+                }
+
+                // Sync resolution
+                if (settings.simResolution) {
+                    this.params.controls.resolution = settings.simResolution;
+                }
+            }
+
+            // Sync physics settings
+            if (this.simulationApp.physicsEngine) {
+                const physics = this.simulationApp.physicsEngine;
+
+                // Sync frequency
+                if (physics.source && physics.source.signal) {
+                    this.params.controls.frequency = physics.source.signal.frequency;
+                }
+
+                // Sync air absorption
+                if (physics.airAbsorption !== undefined && this.params.medium.maxAirAbsorption) {
+                    this.params.controls.airAbsorption = Math.round(
+                        (physics.airAbsorption / this.params.medium.maxAirAbsorption) * 100
+                    );
+                }
+
+                // Sync wall absorption
+                if (physics.wallAbsorption !== undefined) {
+                    this.params.controls.wallAbsorption = Math.round(physics.wallAbsorption * 100);
+                }
+            }
+
+            // Save the synced params
+            this.saveParams();
+        }
+
         this.initialized = false;
         this.imguiCanvas = null;
     }
@@ -184,11 +241,25 @@ class GUI {
             });
 
             // Initialize GUI state from simulation
-            window.visualizationMode = this.params.controls.visualizationMode;
-            window.paused = this.params.controls.paused;
-            window.contrastValue = Math.pow(2, (this.params.controls.contrast - 1) / 99 * 4);
-            window.lowClipValue = this.params.controls.lowClip / 100;
-            window.simResolution = this.params.controls.resolution;
+            if (this.simulationApp) {
+                // Use the SimulationApp instance for initialization
+                this.simulationApp.setVisualizationMode(this.params.controls.visualizationMode);
+                this.simulationApp.isPaused = this.params.controls.paused;
+
+                // Update renderer settings
+                this.simulationApp.renderer.updateSettings({
+                    contrastValue: Math.pow(2, (this.params.controls.contrast - 1) / 99 * 4),
+                    lowClipValue: this.params.controls.lowClip / 100,
+                    simResolution: this.params.controls.resolution
+                });
+            } else {
+                // Fallback to global variables for backward compatibility
+                window.visualizationMode = this.params.controls.visualizationMode;
+                window.paused = this.params.controls.paused;
+                window.contrastValue = Math.pow(2, (this.params.controls.contrast - 1) / 99 * 4);
+                window.lowClipValue = this.params.controls.lowClip / 100;
+                window.simResolution = this.params.controls.resolution;
+            }
 
             this.initialized = true;
             console.log('ImGui initialization completed');
@@ -217,8 +288,11 @@ class GUI {
 
             ImGui.Begin("Wave Simulation Controls", null, windowFlags);
 
-            // Only render controls if simulation is available
-            if (window.simManager && window.simulation) {
+            // Check if we have a valid simulation
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                this.renderControls();
+            } else if (window.simManager && window.simulation) {
+                // Fallback to global variables for backward compatibility
                 this.renderControls();
             } else {
                 ImGui.Text("Simulation is being reinitialized...");
@@ -248,9 +322,14 @@ class GUI {
         ImGui.SameLine();
         if (ImGui.Button("Import Parameters", new ImGui.ImVec2(importExportButtonWidth, 0))) {
             this.importParams().then(async (params) => {
-                if (params && window.appManager) {
-                    // Use the AppManager to reinitialize the simulation
-                    await window.appManager.reinitializeSimulation(this.params);
+                if (params) {
+                    if (this.simulationApp) {
+                        // Use the SimulationApp to reinitialize the simulation
+                        await this.simulationApp.changeResolution(this.params.controls.resolution);
+                    } else if (window.appManager) {
+                        // Fallback to AppManager for backward compatibility
+                        await window.appManager.reinitializeSimulation(this.params);
+                    }
                 }
             });
         }
@@ -261,10 +340,19 @@ class GUI {
         const airAbs = [this.params.controls.airAbsorption];
         if (ImGui.SliderFloat("Air Absorption (%)", airAbs, 0.0, 100.0, "%.1f%%")) {
             this.params.controls.airAbsorption = airAbs[0];
-            window.simulation.setAirAbsorption(
-                airAbs[0] / 100,
-                this.params.medium.maxAirAbsorption
-            );
+
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                this.simulationApp.physicsEngine.setAirAbsorption(
+                    airAbs[0] / 100,
+                    this.params.medium.maxAirAbsorption
+                );
+            } else if (window.simulation) {
+                window.simulation.setAirAbsorption(
+                    airAbs[0] / 100,
+                    this.params.medium.maxAirAbsorption
+                );
+            }
+
             this.saveParams();
         }
 
@@ -272,7 +360,13 @@ class GUI {
         const wallAbs = [this.params.controls.wallAbsorption];
         if (ImGui.SliderFloat("Wall Absorption (%)", wallAbs, 0.0, 100.0, "%.1f%%")) {
             this.params.controls.wallAbsorption = wallAbs[0];
-            window.simulation.setWallAbsorption(wallAbs[0] / 100);
+
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                this.simulationApp.physicsEngine.setWallAbsorption(wallAbs[0] / 100);
+            } else if (window.simulation) {
+                window.simulation.setWallAbsorption(wallAbs[0] / 100);
+            }
+
             this.saveParams();
         }
 
@@ -280,7 +374,13 @@ class GUI {
         const freq = [this.params.controls.frequency];
         if (ImGui.SliderFloat("Frequency (Hz)", freq, 20.0, 500.0, "%.1f Hz")) {
             this.params.controls.frequency = freq[0];
-            window.simulation.setFrequency(freq[0]);
+
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                this.simulationApp.physicsEngine.setFrequency(freq[0]);
+            } else if (window.simulation) {
+                window.simulation.setFrequency(freq[0]);
+            }
+
             this.saveParams();
         }
 
@@ -290,14 +390,26 @@ class GUI {
             this.params.controls.contrast = contrast[0];
             // Map slider value [1,100] to contrast range [1.0, 15.0] with exponential curve
             const normalizedValue = (this.params.controls.contrast - 1) / 99;
-            window.contrastValue = Math.pow(2, normalizedValue * 4);
+            const contrastValue = Math.pow(2, normalizedValue * 4);
+
+            if (this.simulationApp && this.simulationApp.renderer) {
+                this.simulationApp.renderer.updateSettings({ contrastValue });
+            } else {
+                window.contrastValue = contrastValue;
+            }
         }
 
         // Low clip slider
         const lowClip = [this.params.controls.lowClip];
         if (ImGui.SliderFloat("Low Clip (%)", lowClip, 0.0, 100.0, "%.1f%%")) {
             this.params.controls.lowClip = lowClip[0];
-            window.lowClipValue = this.params.controls.lowClip / 100;
+            const lowClipValue = this.params.controls.lowClip / 100;
+
+            if (this.simulationApp && this.simulationApp.renderer) {
+                this.simulationApp.renderer.updateSettings({ lowClipValue });
+            } else {
+                window.lowClipValue = lowClipValue;
+            }
         }
 
         ImGui.Separator();
@@ -314,8 +426,14 @@ class GUI {
         if (ImGui.BeginCombo("Resolution", currentRes.label)) {
             for (const res of resolutions) {
                 if (ImGui.Selectable(res.label, res.value === this.params.controls.resolution)) {
-                    if (window.appManager) {
-                        // Use the AppManager to change resolution
+                    if (this.simulationApp) {
+                        // Use the SimulationApp to change resolution
+                        this.simulationApp.changeResolution(res.value).then(() => {
+                            this.params.controls.resolution = res.value;
+                            this.saveParams();
+                        });
+                    } else if (window.appManager) {
+                        // Fallback to AppManager for backward compatibility
                         window.appManager.changeResolution(res.value).then(() => {
                             this.params.controls.resolution = res.value;
                             window.simResolution = res.value;
@@ -333,7 +451,9 @@ class GUI {
         const buttonWidth = ImGui.GetContentRegionAvail().x / 3 - 5;
 
         if (ImGui.Button("Trigger Impulse", new ImGui.ImVec2(buttonWidth, 0))) {
-            if (window.simulation) {
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                this.simulationApp.physicsEngine.triggerImpulse();
+            } else if (window.simulation) {
                 window.simulation.triggerImpulse();
             }
         }
@@ -341,13 +461,23 @@ class GUI {
         ImGui.SameLine();
         if (ImGui.Button("Toggle Visualization", new ImGui.ImVec2(buttonWidth, 0))) {
             this.params.controls.visualizationMode = this.params.controls.visualizationMode === 'pressure' ? 'intensity' : 'pressure';
-            window.visualizationMode = this.params.controls.visualizationMode;
+
+            if (this.simulationApp && this.simulationApp.renderer) {
+                this.simulationApp.setVisualizationMode(this.params.controls.visualizationMode);
+            } else {
+                window.visualizationMode = this.params.controls.visualizationMode;
+            }
         }
 
         ImGui.SameLine();
         if (ImGui.Button(this.params.controls.paused ? "Resume" : "Pause", new ImGui.ImVec2(buttonWidth, 0))) {
             this.params.controls.paused = !this.params.controls.paused;
-            window.paused = this.params.controls.paused;
+
+            if (this.simulationApp) {
+                this.simulationApp.togglePause();
+            } else {
+                window.paused = this.params.controls.paused;
+            }
         }
 
         ImGui.Separator();
@@ -386,8 +516,15 @@ class GUI {
         }
 
         // Draw signal waveform
-        if (window.simulation && window.simulation.source && window.simulation.source.signal) {
-            const signal = window.simulation.source.signal;
+        let signal = null;
+
+        if (this.simulationApp && this.simulationApp.physicsEngine && this.simulationApp.physicsEngine.getSource()) {
+            signal = this.simulationApp.physicsEngine.getSource().signal;
+        } else if (window.simulation && window.simulation.source && window.simulation.source.signal) {
+            signal = window.simulation.source.signal;
+        }
+
+        if (signal) {
             const points = [];
             const numPoints = 100;
             const timeScale = 1 / this.params.controls.frequency; // One period
@@ -431,9 +568,19 @@ class GUI {
     }
 }
 
-// Initialize GUI
-const gui = new GUI();
-gui.init().catch(console.error);
+// Initialize GUI - this is only used for backward compatibility
+// In the new architecture, the GUI is initialized by the SimulationApp
+if (typeof window !== 'undefined') {
+    // Export the GUI class globally so SimulationApp can access it
+    window.GUI = GUI;
 
-// Export for p5.js
-window.renderGUI = () => gui.render();
+    // For backward compatibility
+    if (!window.app) {
+        const gui = new GUI();
+        gui.init().catch(console.error);
+        window.gui = gui;
+
+        // Export for p5.js
+        window.renderGUI = () => gui.render();
+    }
+}
