@@ -10,14 +10,13 @@ let app;
 
 // Initialize the application when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('Initializing wave simulation...');
     initializeApp();
 });
 
 // Initialize the application
 async function initializeApp() {
     try {
-        console.log('Initializing application...');
-
         // Create and initialize the simulation app
         app = new SimulationApp({
             updateRate: 60,
@@ -53,7 +52,7 @@ async function initializeApp() {
             }
         };
 
-        console.log('Application initialized successfully');
+        console.log('Wave simulation initialized successfully');
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }

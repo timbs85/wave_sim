@@ -36,8 +36,6 @@ class SimulationApp {
      */
     async initialize() {
         try {
-            console.log('Initializing application...');
-
             // Initialize physics engine
             await this.initializePhysicsEngine();
 
@@ -82,8 +80,28 @@ class SimulationApp {
         // Initialize the physics engine
         await this.physicsEngine.initialize(window.params.controls.frequency);
 
-        console.log('Physics engine initialized');
+        // Apply amplitude scaling based on current resolution
+        this.applyAmplitudeScaling(this.config.simResolution);
+
         return this.physicsEngine;
+    }
+
+    /**
+     * Apply amplitude scaling based on resolution
+     * This only affects the simulation, not the GUI display
+     */
+    applyAmplitudeScaling(resolution) {
+        if (!this.physicsEngine || !this.physicsEngine.source) return;
+
+        // Calculate amplitude scaling factor based on resolution
+        const baseResolution = 8;
+        const resolutionRatio = baseResolution / resolution;
+        const amplitudeScale = resolutionRatio * resolutionRatio;
+
+        // Apply the scaling factor to the source
+        this.physicsEngine.source.setAmplitudeScale(amplitudeScale);
+
+        console.log(`Applied amplitude scaling: ${amplitudeScale.toFixed(2)}x for resolution ${resolution}px`);
     }
 
     /**
@@ -105,7 +123,6 @@ class SimulationApp {
             lowClipValue: this.config.lowClipValue
         });
 
-        console.log('Renderer initialized');
         return this.renderer;
     }
 
@@ -122,7 +139,6 @@ class SimulationApp {
         };
 
         this.animationFrameId = requestAnimationFrame(animate);
-        console.log('Animation loop started');
     }
 
     /**
@@ -233,6 +249,9 @@ class SimulationApp {
         // Set source position
         this.physicsEngine.setSource(newSourceX, newSourceY);
 
+        // Apply amplitude scaling based on resolution
+        this.applyAmplitudeScaling(resolution);
+
         // Update renderer resolution
         this.renderer.updateSettings({ simResolution: resolution });
 
@@ -265,6 +284,19 @@ class SimulationApp {
         }
 
         console.log('Application disposed');
+    }
+
+    /**
+     * Set the source frequency and maintain amplitude scaling
+     */
+    setFrequency(freq) {
+        if (!this.physicsEngine) return;
+
+        // Set the frequency in the physics engine
+        this.physicsEngine.setFrequency(freq);
+
+        // Re-apply amplitude scaling to ensure it's maintained after frequency change
+        this.applyAmplitudeScaling(this.config.simResolution);
     }
 }
 

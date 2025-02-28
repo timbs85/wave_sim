@@ -175,8 +175,6 @@ class GUI {
 
     async init() {
         try {
-            console.log('Initializing ImGui...');
-
             // Get the container
             const container = document.getElementById('controls-container');
             const imguiContainer = document.getElementById('imgui-container');
@@ -262,7 +260,6 @@ class GUI {
             }
 
             this.initialized = true;
-            console.log('ImGui initialization completed');
         } catch (error) {
             console.error('Error initializing ImGui:', error);
             throw error;
@@ -375,8 +372,9 @@ class GUI {
         if (ImGui.SliderFloat("Frequency (Hz)", freq, 20.0, 500.0, "%.1f Hz")) {
             this.params.controls.frequency = freq[0];
 
-            if (this.simulationApp && this.simulationApp.physicsEngine) {
-                this.simulationApp.physicsEngine.setFrequency(freq[0]);
+            if (this.simulationApp) {
+                // Use our new method that maintains amplitude scaling
+                this.simulationApp.setFrequency(freq[0]);
             } else if (window.simulation) {
                 window.simulation.setFrequency(freq[0]);
             }
@@ -574,13 +572,6 @@ if (typeof window !== 'undefined') {
     // Export the GUI class globally so SimulationApp can access it
     window.GUI = GUI;
 
-    // For backward compatibility
-    if (!window.app) {
-        const gui = new GUI();
-        gui.init().catch(console.error);
-        window.gui = gui;
-
-        // Export for p5.js
-        window.renderGUI = () => gui.render();
-    }
+    // We no longer need the backward compatibility initialization
+    // The SimulationApp will handle GUI initialization
 }

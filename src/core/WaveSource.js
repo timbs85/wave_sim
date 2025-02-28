@@ -16,6 +16,9 @@ class WaveSource {
 
         // State
         this.isActive = false;
+
+        // Amplitude scaling factor for resolution compensation
+        this.amplitudeScale = 1.0;
     }
 
     setPosition(x, y) {
@@ -30,24 +33,31 @@ class WaveSource {
 
     setFrequency(freq) {
         this.signal.setFrequency(freq);
-        console.log('Source frequency set to:', freq, 'Hz');
     }
 
     setSignal(type, params = {}) {
         this.signal = new Signal(type, params);
     }
 
+    // Set amplitude scaling factor
+    setAmplitudeScale(scale) {
+        this.amplitudeScale = scale;
+    }
+
     trigger() {
         this.isActive = true;
         this.signal.reset();
-        console.log('Source triggered');
     }
 
     updateSource(pressureField, dt) {
         if (!this.isActive) return;
 
-        const sourceValue = this.signal.getValue(dt);
-        if (sourceValue !== 0) {
+        // Get the base source value from the signal
+        const baseSourceValue = this.signal.getValue(dt);
+
+        if (baseSourceValue !== 0) {
+            // Apply amplitude scaling to the source value
+            const sourceValue = baseSourceValue * this.amplitudeScale;
             const sourceIdx = this.x + this.y * this.cols;
             this._applySourcePressure(pressureField, sourceIdx, sourceValue);
         } else {
@@ -109,4 +119,4 @@ class WaveSource {
         if (this.x < this.cols - 1 && this.y < this.rows - 1)
             pressureField.pressurePrevious[sourceIdx + 1 + this.cols] += sourceValue * diagonalWeight * 0.9;
     }
-} 
+}
