@@ -16,6 +16,7 @@ class Renderer {
         this.lowClipValue = config.lowClipValue || 0.0;
         this.visualizationMode = config.visualizationMode || 'pressure';
         this.simResolution = config.simResolution || 8;
+        this.brightnessScale = config.brightnessScale || 1.0;
 
         // Initialize color lookup tables
         this.PRESSURE_STEPS = 1024;
@@ -85,6 +86,7 @@ class Renderer {
         if (settings.lowClipValue !== undefined) this.lowClipValue = settings.lowClipValue;
         if (settings.visualizationMode !== undefined) this.visualizationMode = settings.visualizationMode;
         if (settings.simResolution !== undefined) this.simResolution = settings.simResolution;
+        if (settings.brightnessScale !== undefined) this.brightnessScale = settings.brightnessScale;
     }
 
     /**
@@ -95,7 +97,8 @@ class Renderer {
             contrastValue: this.contrastValue,
             lowClipValue: this.lowClipValue,
             visualizationMode: this.visualizationMode,
-            simResolution: this.simResolution
+            simResolution: this.simResolution,
+            brightnessScale: this.brightnessScale
         };
     }
 
@@ -113,8 +116,11 @@ class Renderer {
      * Get pressure color index for the lookup table
      */
     getPressureColorIndex(pressure) {
+        // Apply brightness scaling to the pressure value
+        const scaledPressure = pressure * this.brightnessScale;
+
         // Apply contrast to the pressure value
-        const contrastedPressure = pressure * this.contrastValue;
+        const contrastedPressure = scaledPressure * this.contrastValue;
 
         // Apply low clip - if absolute pressure is below threshold, set to zero
         const clippedPressure = Math.abs(contrastedPressure) < this.lowClipValue ? 0 : contrastedPressure;
@@ -174,7 +180,7 @@ class Renderer {
     /**
      * Render the simulation
      */
-    render(physicsEngine) {
+    render(physicsEngine, deltaTime = 16.67) {
         if (!physicsEngine || !physicsEngine.getPressureField()) return;
 
         const cols = physicsEngine.cols;
@@ -191,6 +197,16 @@ class Renderer {
         const imageHeight = rows * this.simResolution;
         if (!this.imageData || this.imageData.width !== imageWidth || this.imageData.height !== imageHeight) {
             this.imageData = new ImageData(imageWidth, imageHeight);
+
+            // Initialize previous pressure field for interpolation
+            if (!this.prevPressureField) {
+                this.prevPressureField = new Float32Array(cols * rows);
+            }
+        }
+
+        // Resize previous pressure field if needed
+        if (this.prevPressureField && this.prevPressureField.length !== cols * rows) {
+            this.prevPressureField = new Float32Array(cols * rows);
         }
 
         // Get display parameters
@@ -200,6 +216,11 @@ class Renderer {
         // Render the simulation
         const currentLookup = this.colorLookup[this.visualizationMode];
         const pixels = new Uint8Array(this.imageData.data.buffer);
+
+        // Calculate interpolation factor for smooth transitions between physics updates
+        // This is based on the accumulator in SimulationApp
+        const interpolationFactor = physicsEngine.simulationApp ?
+            Math.min(1.0, physicsEngine.simulationApp.physicsAccumulator / physicsEngine.simulationApp.updateInterval) : 0;
 
         // Update pixel buffer - working directly in simulation grid coordinates
         for (let gridY = 0; gridY < rows; gridY++) {
@@ -215,7 +236,22 @@ class Renderer {
                     a = isAnechoic ? 64 : 255;
                 } else {
                     // Pressure cell - use same grid coordinates for pressure sampling
-                    const pressure = physicsEngine.getPressure(gridX, gridY);
+                    const currentPressure = physicsEngine.getPressure(gridX, gridY);
+
+                    // Store current pressure for next frame's interpolation
+                    const prevPressure = this.prevPressureField ? this.prevPressureField[idx] || 0 : 0;
+
+                    // Interpolate between previous and current pressure
+                    let pressure = currentPressure;
+                    if (this.prevPressureField && interpolationFactor > 0) {
+                        pressure = prevPressure + (currentPressure - prevPressure) * interpolationFactor;
+                    }
+
+                    // Update previous pressure field for next frame
+                    if (this.prevPressureField) {
+                        this.prevPressureField[idx] = currentPressure;
+                    }
+
                     const lookupIdx = this.getPressureColorIndex(pressure) * 4;
                     r = currentLookup[lookupIdx];
                     g = currentLookup[lookupIdx + 1];
@@ -271,11 +307,5 @@ class Renderer {
     }
 }
 
-// Export for both module and global use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { Renderer };
-}
-
-if (typeof window !== 'undefined') {
-    window.Renderer = Renderer;
-}
+// Export for browser use
+window.Renderer = Renderer;

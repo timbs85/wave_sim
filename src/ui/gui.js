@@ -61,6 +61,16 @@ class GUI {
 
         this.initialized = false;
         this.imguiCanvas = null;
+
+        // Initialize pressure history buffer for waveform display
+        this.pressureHistory = new Array(200).fill(0);
+
+        // Performance monitoring
+        this.fpsHistory = new Array(60).fill(0);
+        this.lastFrameTime = performance.now();
+        this.frameCount = 0;
+        this.physicsUpdatesPerSecond = this.simulationApp ?
+            1000 / this.simulationApp.updateInterval : 60;
     }
 
     loadParams() {
@@ -270,6 +280,19 @@ class GUI {
         if (!this.initialized) return;
 
         try {
+            // Calculate FPS
+            const now = performance.now();
+            this.frameCount++;
+
+            // Update FPS counter once per second
+            if (now - this.lastFrameTime >= 1000) {
+                const fps = Math.round(this.frameCount * 1000 / (now - this.lastFrameTime));
+                this.fpsHistory.shift();
+                this.fpsHistory.push(fps);
+                this.frameCount = 0;
+                this.lastFrameTime = now;
+            }
+
             // Start a new ImGui frame
             ImGui_Impl.NewFrame();
             ImGui.NewFrame();
@@ -311,6 +334,13 @@ class GUI {
         // Add a custom title since we removed the title bar
         ImGui.Text("Wave Simulation Controls");
 
+        // Display performance metrics
+        const avgFps = this.fpsHistory.filter(fps => fps > 0).length > 0 ?
+            this.fpsHistory.filter(fps => fps > 0).reduce((sum, fps) => sum + fps, 0) /
+            this.fpsHistory.filter(fps => fps > 0).length :
+            0;
+        ImGui.Text(`FPS: ${Math.round(avgFps)} | Physics Rate: ${this.physicsUpdatesPerSecond.toFixed(1)} Hz`);
+
         // Add import/export buttons
         const importExportButtonWidth = ImGui.GetContentRegionAvail().x / 2 - 5;
         if (ImGui.Button("Export Parameters", new ImGui.ImVec2(importExportButtonWidth, 0))) {
@@ -319,14 +349,9 @@ class GUI {
         ImGui.SameLine();
         if (ImGui.Button("Import Parameters", new ImGui.ImVec2(importExportButtonWidth, 0))) {
             this.importParams().then(async (params) => {
-                if (params) {
-                    if (this.simulationApp) {
-                        // Use the SimulationApp to reinitialize the simulation
-                        await this.simulationApp.changeResolution(this.params.controls.resolution);
-                    } else if (window.appManager) {
-                        // Fallback to AppManager for backward compatibility
-                        await window.appManager.reinitializeSimulation(this.params);
-                    }
+                if (params && this.simulationApp) {
+                    // Use the SimulationApp to reinitialize the simulation
+                    await this.simulationApp.changeResolution(this.params.controls.resolution);
                 }
             });
         }
@@ -373,10 +398,24 @@ class GUI {
             this.params.controls.frequency = freq[0];
 
             if (this.simulationApp) {
-                // Use our new method that maintains amplitude scaling
+                // Use the updated method that no longer applies amplitude scaling
                 this.simulationApp.setFrequency(freq[0]);
             } else if (window.simulation) {
                 window.simulation.setFrequency(freq[0]);
+            }
+
+            this.saveParams();
+        }
+
+        // Brightness slider (new)
+        const brightness = [this.params.controls.brightness || 100];
+        if (ImGui.SliderFloat("Brightness", brightness, 1.0, 200.0, "%.1f%%")) {
+            this.params.controls.brightness = brightness[0];
+            // Map slider value [1,200] to brightness scale [0.01,2.0]
+            const brightnessScale = brightness[0] / 100;
+
+            if (this.simulationApp && this.simulationApp.renderer) {
+                this.simulationApp.renderer.updateSettings({ brightnessScale });
             }
 
             this.saveParams();
@@ -428,13 +467,6 @@ class GUI {
                         // Use the SimulationApp to change resolution
                         this.simulationApp.changeResolution(res.value).then(() => {
                             this.params.controls.resolution = res.value;
-                            this.saveParams();
-                        });
-                    } else if (window.appManager) {
-                        // Fallback to AppManager for backward compatibility
-                        window.appManager.changeResolution(res.value).then(() => {
-                            this.params.controls.resolution = res.value;
-                            window.simResolution = res.value;
                             this.saveParams();
                         });
                     }
@@ -513,65 +545,72 @@ class GUI {
             );
         }
 
-        // Draw signal waveform
-        let signal = null;
+        // Update pressure history with current pressure at source
+        if (!this.params.controls.paused) {
+            let currentPressure = 0;
 
-        if (this.simulationApp && this.simulationApp.physicsEngine && this.simulationApp.physicsEngine.getSource()) {
-            signal = this.simulationApp.physicsEngine.getSource().signal;
-        } else if (window.simulation && window.simulation.source && window.simulation.source.signal) {
-            signal = window.simulation.source.signal;
+            // Get the current pressure at the source position
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                const source = this.simulationApp.physicsEngine.getSource();
+                if (source) {
+                    // Get pressure at source position
+                    currentPressure = this.simulationApp.physicsEngine.getPressure(source.x, source.y);
+
+                    // Update at a consistent rate based on physics update rate
+                    // Calculate how many frames to skip to match physics rate
+                    const physicsRate = this.physicsUpdatesPerSecond;
+                    const renderRate = avgFps || 60;
+                    const updateEveryNFrames = Math.max(1, Math.round(renderRate / physicsRate));
+
+                    if (this.frameCount % updateEveryNFrames === 0) {
+                        this.pressureHistory.shift();
+                        this.pressureHistory.push(currentPressure);
+                    }
+                }
+            } else if (window.simulation && window.simulation.source) {
+                const source = window.simulation.source;
+                currentPressure = window.simulation.getPressure(source.x, source.y);
+
+                // Legacy update method
+                this.pressureHistory.shift();
+                this.pressureHistory.push(currentPressure);
+            }
         }
 
-        if (signal) {
-            const points = [];
-            const numPoints = 100;
-            const timeScale = 1 / this.params.controls.frequency; // One period
+        // Draw zero line
+        drawList.AddLine(
+            new ImGui.ImVec2(graphPos.x, graphPos.y + graphHeight * 0.5),
+            new ImGui.ImVec2(graphPos.x + graphWidth, graphPos.y + graphHeight * 0.5),
+            ImGui.COL32(100, 100, 100, 255)
+        );
 
-            // Create a temporary signal for visualization
-            const tempSignal = new Signal(signal.type, {
-                frequency: signal.frequency,
-                amplitude: signal.amplitude,
-                phase: signal.phase,
-                pulseWidth: signal.pulseWidth,
-                harmonics: signal.harmonics
-            });
+        // Draw the waveform from pressure history
+        const points = [];
+        const numPoints = this.pressureHistory.length;
+        // Pressure typically ranges from -1 to 1
+        const maxPressure = 1.0;
 
-            for (let i = 0; i < numPoints; i++) {
-                const t = (i / numPoints) * timeScale;
-                const value = tempSignal.getValue(t);
-                const x = graphPos.x + (i / numPoints) * graphWidth;
-                const y = graphPos.y + (0.5 - value * 0.45) * graphHeight; // Increased vertical scale
-                points.push(new ImGui.ImVec2(x, y));
-            }
+        for (let i = 0; i < numPoints; i++) {
+            const x = graphPos.x + (i / numPoints) * graphWidth;
+            // Normalize pressure value to [-0.45, 0.45] range for display
+            const normalizedValue = Math.max(-0.45, Math.min(0.45, this.pressureHistory[i] / maxPressure));
+            const y = graphPos.y + (0.5 - normalizedValue) * graphHeight;
+            points.push(new ImGui.ImVec2(x, y));
+        }
 
-            // Draw zero line
+        // Draw the waveform
+        for (let i = 0; i < points.length - 1; i++) {
             drawList.AddLine(
-                new ImGui.ImVec2(graphPos.x, graphPos.y + graphHeight * 0.5),
-                new ImGui.ImVec2(graphPos.x + graphWidth, graphPos.y + graphHeight * 0.5),
-                ImGui.COL32(100, 100, 100, 255)
+                points[i],
+                points[i + 1],
+                ImGui.COL32(255, 255, 0, 255),
+                1.5
             );
-
-            // Draw the waveform
-            for (let i = 0; i < points.length - 1; i++) {
-                drawList.AddLine(
-                    points[i],
-                    points[i + 1],
-                    ImGui.COL32(255, 255, 0, 255),
-                    1.5
-                );
-            }
         }
 
         ImGui.Dummy(new ImGui.ImVec2(0, graphHeight + 10)); // Add space after the graph
     }
 }
 
-// Initialize GUI - this is only used for backward compatibility
-// In the new architecture, the GUI is initialized by the SimulationApp
-if (typeof window !== 'undefined') {
-    // Export the GUI class globally so SimulationApp can access it
-    window.GUI = GUI;
-
-    // We no longer need the backward compatibility initialization
-    // The SimulationApp will handle GUI initialization
-}
+// Export for browser use
+window.GUI = GUI;

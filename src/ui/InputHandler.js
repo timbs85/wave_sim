@@ -140,11 +140,5 @@ class InputHandler {
     }
 }
 
-// Export for both module and global use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { InputHandler };
-}
-
-if (typeof window !== 'undefined') {
-    window.InputHandler = InputHandler;
-}
+// Export for browser use
+window.InputHandler = InputHandler;

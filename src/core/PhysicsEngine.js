@@ -211,11 +211,5 @@ class PhysicsEngine {
     }
 }
 
-// Export for both module and global use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { PhysicsEngine };
-}
-
-if (typeof window !== 'undefined') {
-    window.PhysicsEngine = PhysicsEngine;
-}
+// Export for browser use
+window.PhysicsEngine = PhysicsEngine;

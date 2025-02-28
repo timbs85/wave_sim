@@ -24,7 +24,9 @@ class SimulationApp {
         // Animation state
         this.animationFrameId = null;
         this.lastUpdateTime = 0;
+        this.lastRenderTime = 0;
         this.updateInterval = 1000 / this.config.updateRate;
+        this.physicsAccumulator = 0;
         this.isPaused = false;
 
         // Initialization state
@@ -80,10 +82,28 @@ class SimulationApp {
         // Initialize the physics engine
         await this.physicsEngine.initialize(window.params.controls.frequency);
 
-        // Apply amplitude scaling based on current resolution
-        this.applyAmplitudeScaling(this.config.simResolution);
+        // Calculate brightness scale for renderer based on resolution
+        this.updateBrightnessScale(this.config.simResolution);
 
         return this.physicsEngine;
+    }
+
+    /**
+     * Update brightness scale for renderer based on resolution
+     * This only affects the visual display, not the simulation
+     */
+    updateBrightnessScale(resolution) {
+        if (!this.renderer) return;
+
+        // Calculate brightness scaling factor based on resolution
+        const baseResolution = 8;
+        const resolutionRatio = baseResolution / resolution;
+        const brightnessScale = resolutionRatio * resolutionRatio;
+
+        // Apply the scaling factor to the renderer
+        this.renderer.updateSettings({ brightnessScale });
+
+        console.log(`Applied brightness scaling: ${brightnessScale.toFixed(2)}x for resolution ${resolution}px`);
     }
 
     /**
@@ -91,17 +111,8 @@ class SimulationApp {
      * This only affects the simulation, not the GUI display
      */
     applyAmplitudeScaling(resolution) {
-        if (!this.physicsEngine || !this.physicsEngine.source) return;
-
-        // Calculate amplitude scaling factor based on resolution
-        const baseResolution = 8;
-        const resolutionRatio = baseResolution / resolution;
-        const amplitudeScale = resolutionRatio * resolutionRatio;
-
-        // Apply the scaling factor to the source
-        this.physicsEngine.source.setAmplitudeScale(amplitudeScale);
-
-        console.log(`Applied amplitude scaling: ${amplitudeScale.toFixed(2)}x for resolution ${resolution}px`);
+        // This method is kept for backward compatibility but does nothing now
+        console.log(`Amplitude scaling removed: simulation now uses consistent amplitude regardless of resolution`);
     }
 
     /**
@@ -120,8 +131,12 @@ class SimulationApp {
             simResolution: this.config.simResolution,
             visualizationMode: this.config.visualizationMode,
             contrastValue: this.config.contrastValue,
-            lowClipValue: this.config.lowClipValue
+            lowClipValue: this.config.lowClipValue,
+            brightnessScale: 1.0 // Default brightness scale
         });
+
+        // Update brightness scale based on resolution
+        this.updateBrightnessScale(this.config.simResolution);
 
         return this.renderer;
     }
@@ -132,50 +147,69 @@ class SimulationApp {
     startAnimationLoop() {
         if (this.animationFrameId) return;
 
+        // Initialize timing variables
+        this.lastUpdateTime = performance.now();
+        this.lastRenderTime = this.lastUpdateTime;
+        this.physicsAccumulator = 0;
+
         const animate = (timestamp) => {
             this.animationFrameId = requestAnimationFrame(animate);
-            this.update(timestamp);
-            this.render();
+
+            // Calculate delta time since last frame
+            const currentTime = performance.now();
+            const deltaTime = currentTime - this.lastUpdateTime;
+            this.lastUpdateTime = currentTime;
+
+            // Update physics with fixed timestep
+            this.updatePhysics(deltaTime);
+
+            // Render with delta time
+            const renderDeltaTime = currentTime - this.lastRenderTime;
+            this.lastRenderTime = currentTime;
+            this.render(renderDeltaTime);
         };
 
         this.animationFrameId = requestAnimationFrame(animate);
     }
 
     /**
-     * Stop the animation loop
+     * Update the physics simulation with fixed timestep
      */
-    stopAnimationLoop() {
-        if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-            console.log('Animation loop stopped');
+    updatePhysics(deltaTime) {
+        if (!this.physicsEngine || this.isPaused) return;
+
+        // Add time to the accumulator
+        this.physicsAccumulator += deltaTime;
+
+        // Share accumulator with physics engine for interpolation
+        if (this.physicsEngine) {
+            this.physicsEngine.simulationApp = this;
+        }
+
+        // Update physics in fixed timesteps
+        while (this.physicsAccumulator >= this.updateInterval) {
+            this.physicsEngine.update();
+            this.physicsAccumulator -= this.updateInterval;
         }
     }
 
     /**
-     * Update the simulation state
+     * Update the simulation state (legacy method, redirects to updatePhysics)
      */
     update(timestamp) {
-        if (!this.physicsEngine || this.isPaused) return;
-
         // Calculate time delta
         const elapsed = timestamp - this.lastUpdateTime;
-
-        // Update at fixed time intervals
-        if (elapsed >= this.updateInterval) {
-            this.physicsEngine.update();
-            this.lastUpdateTime = timestamp;
-        }
+        this.updatePhysics(elapsed);
     }
 
     /**
      * Render the current state
      */
-    render() {
+    render(deltaTime) {
         if (!this.renderer || !this.physicsEngine) return;
 
-        // Render the simulation
-        this.renderer.render(this.physicsEngine);
+        // Render the simulation with delta time
+        this.renderer.render(this.physicsEngine, deltaTime);
 
         // Render GUI if available
         if (this.gui && typeof this.gui.render === 'function') {
@@ -249,11 +283,11 @@ class SimulationApp {
         // Set source position
         this.physicsEngine.setSource(newSourceX, newSourceY);
 
-        // Apply amplitude scaling based on resolution
-        this.applyAmplitudeScaling(resolution);
-
         // Update renderer resolution
         this.renderer.updateSettings({ simResolution: resolution });
+
+        // Update brightness scale for the new resolution
+        this.updateBrightnessScale(resolution);
 
         return this.physicsEngine;
     }
@@ -294,17 +328,19 @@ class SimulationApp {
 
         // Set the frequency in the physics engine
         this.physicsEngine.setFrequency(freq);
+    }
 
-        // Re-apply amplitude scaling to ensure it's maintained after frequency change
-        this.applyAmplitudeScaling(this.config.simResolution);
+    /**
+     * Stop the animation loop
+     */
+    stopAnimationLoop() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+            console.log('Animation loop stopped');
+        }
     }
 }
 
-// Export for both module and global use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SimulationApp };
-}
-
-if (typeof window !== 'undefined') {
-    window.SimulationApp = SimulationApp;
-}
+// Export for browser use
+window.SimulationApp = SimulationApp;

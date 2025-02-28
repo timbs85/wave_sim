@@ -17,7 +17,7 @@ class WaveSource {
         // State
         this.isActive = false;
 
-        // Amplitude scaling factor for resolution compensation
+        // Amplitude scaling factor is always 1.0 now
         this.amplitudeScale = 1.0;
     }
 
@@ -39,9 +39,10 @@ class WaveSource {
         this.signal = new Signal(type, params);
     }
 
-    // Set amplitude scaling factor
+    // Set amplitude scaling factor - kept for backward compatibility
     setAmplitudeScale(scale) {
-        this.amplitudeScale = scale;
+        // Do nothing - amplitude scaling is no longer applied
+        this.amplitudeScale = 1.0;
     }
 
     trigger() {
@@ -56,8 +57,8 @@ class WaveSource {
         const baseSourceValue = this.signal.getValue(dt);
 
         if (baseSourceValue !== 0) {
-            // Apply amplitude scaling to the source value
-            const sourceValue = baseSourceValue * this.amplitudeScale;
+            // Use the source value directly without scaling
+            const sourceValue = baseSourceValue;
             const sourceIdx = this.x + this.y * this.cols;
             this._applySourcePressure(pressureField, sourceIdx, sourceValue);
         } else {

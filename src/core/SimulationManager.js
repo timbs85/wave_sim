@@ -97,6 +97,14 @@ class SimulationManager {
         // Set source position
         this.simulation.setSource(newSourceX, newSourceY);
 
+        // Update renderer brightness if available
+        if (window.renderer) {
+            const baseResolution = 8;
+            const resolutionRatio = baseResolution / newResolution;
+            const brightnessScale = resolutionRatio * resolutionRatio;
+            window.renderer.updateSettings({ brightnessScale });
+        }
+
         // Restart the simulation loop
         this.start();
 
@@ -162,11 +170,5 @@ class SimulationManager {
     }
 }
 
-// Export for both module and global use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { SimulationManager };
-}
-
-if (typeof window !== 'undefined') {
-    window.SimulationManager = SimulationManager;
-}
+// Export for browser use
+window.SimulationManager = SimulationManager;

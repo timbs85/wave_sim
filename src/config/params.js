@@ -51,11 +51,5 @@ const params = {
     }
 };
 
-// Export as both a module export and global variable for compatibility
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { params };
-}
-
-if (typeof window !== 'undefined') {
-    window.params = params;
-} 
+// Export for browser use
+window.params = params;

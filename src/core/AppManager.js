@@ -138,11 +138,5 @@ class AppManager {
     }
 }
 
-// Export for both module and global use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { AppManager };
-}
-
-if (typeof window !== 'undefined') {
-    window.AppManager = AppManager;
-}
+// Export for browser use
+window.AppManager = AppManager;
