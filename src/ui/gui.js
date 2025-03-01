@@ -112,16 +112,18 @@ class GUI {
     }
 
     async init() {
-        // Create main Tweakpane instance
+        // Create main Tweakpane instance directly in the GUI container
         this.pane = new Tweakpane.Pane({
-            container: document.getElementById('pane-container'),
-            title: 'Sound Wave Simulation'
+            container: document.getElementById('gui-container'),
+            title: 'Sound Wave Simulation' // Use title directly in the pane
         });
 
         // Add sections for controls
         this.setupControls();
         this.setupPerformanceMonitor();
-        this.setupNotes();
+
+        // Set up draggable GUI (but without collapsible functionality)
+        this.setupDraggableGUI();
 
         // Update the GUI to match current settings
         this.updateDisplay();
@@ -130,11 +132,10 @@ class GUI {
     }
 
     setupControls() {
-        // Simulation Control Folder
-        const simFolder = this.pane.addFolder({ title: 'Simulation Controls' });
+        // Add controls directly to the main pane without folders
 
         // Visualization mode dropdown
-        simFolder.addInput(this.params.controls, 'visualizationMode', {
+        this.pane.addInput(this.params.controls, 'visualizationMode', {
             options: {
                 Pressure: 'pressure',
                 Intensity: 'intensity'
@@ -146,20 +147,10 @@ class GUI {
             }
         });
 
-        // Resolution slider
-        simFolder.addInput(this.params.controls, 'resolution', {
-            min: 1,
-            max: 16,
-            step: 1
-        }).on('change', (ev) => {
-            if (this.simulationApp) {
-                this.simulationApp.setResolution(ev.value);
-                this.saveParams();
-            }
-        });
+        // Resolution is now fixed at medium quality
 
         // Pause button
-        simFolder.addInput(this.params.controls, 'paused', {
+        this.pane.addInput(this.params.controls, 'paused', {
             label: 'Pause Simulation'
         }).on('change', (ev) => {
             if (this.simulationApp) {
@@ -172,11 +163,8 @@ class GUI {
             }
         });
 
-        // Visualization Folder
-        const visFolder = this.pane.addFolder({ title: 'Visualization' });
-
         // Contrast slider
-        visFolder.addInput(this.params.controls, 'contrast', {
+        this.pane.addInput(this.params.controls, 'contrast', {
             min: 1,
             max: 100,
             step: 1
@@ -191,7 +179,7 @@ class GUI {
         });
 
         // Low clip slider
-        visFolder.addInput(this.params.controls, 'lowClip', {
+        this.pane.addInput(this.params.controls, 'lowClip', {
             min: 0,
             max: 100,
             step: 1
@@ -204,11 +192,8 @@ class GUI {
             }
         });
 
-        // Physics Folder
-        const physicsFolder = this.pane.addFolder({ title: 'Physics' });
-
         // Frequency slider
-        physicsFolder.addInput(this.params.controls, 'frequency', {
+        this.pane.addInput(this.params.controls, 'frequency', {
             min: 20,
             max: 1000,
             step: 1
@@ -221,7 +206,7 @@ class GUI {
         });
 
         // Air absorption slider
-        physicsFolder.addInput(this.params.controls, 'airAbsorption', {
+        this.pane.addInput(this.params.controls, 'airAbsorption', {
             min: 0,
             max: 100,
             step: 1
@@ -235,7 +220,7 @@ class GUI {
         });
 
         // Wall absorption slider
-        physicsFolder.addInput(this.params.controls, 'wallAbsorption', {
+        this.pane.addInput(this.params.controls, 'wallAbsorption', {
             min: 0,
             max: 100,
             step: 1
@@ -248,21 +233,15 @@ class GUI {
             }
         });
 
-        // Add Reset button
-        this.pane.addButton({ title: 'Reset to Defaults' }).on('click', () => {
-            if (this.simulationApp) {
-                this.resetToDefaults();
+        // Add Trigger Impulse button
+        this.pane.addButton({ title: 'Trigger Impulse' }).on('click', () => {
+            if (this.simulationApp && this.simulationApp.physicsEngine) {
+                this.simulationApp.physicsEngine.triggerImpulse();
             }
         });
     }
 
     setupPerformanceMonitor() {
-        // Create a folder for performance monitoring
-        const perfFolder = this.pane.addFolder({
-            title: 'Performance Monitor',
-            expanded: false
-        });
-
         // Create objects to monitor
         this.performanceStats = {
             fps: '0 FPS',
@@ -272,57 +251,34 @@ class GUI {
 
         // Add performance monitors with empty values
         this.performanceMonitor = {
-            fps: perfFolder.addMonitor(this.performanceStats, 'fps', {
+            fps: this.pane.addMonitor(this.performanceStats, 'fps', {
                 label: 'Render FPS'
             }),
-            physics: perfFolder.addMonitor(this.performanceStats, 'physics', {
+            physics: this.pane.addMonitor(this.performanceStats, 'physics', {
                 label: 'Physics Updates'
             }),
-            cells: perfFolder.addMonitor(this.performanceStats, 'cells', {
+            cells: this.pane.addMonitor(this.performanceStats, 'cells', {
                 label: 'Grid Cells'
             })
         };
     }
 
-    setupNotes() {
-        // Create a folder for notes/help
-        const notesFolder = this.pane.addFolder({
-            title: 'Help & Information',
-            expanded: false
-        });
-
-        // Create info objects
-        const infoControls = { text: 'Left click to move source' };
-        const infoNotes = { text: 'Grid resolution affects performance' };
-
-        // Add explanation text
-        notesFolder.addMonitor(infoControls, 'text', {
-            label: 'Controls'
-        });
-
-        notesFolder.addMonitor(infoNotes, 'text', {
-            label: 'Notes'
-        });
-    }
-
     updateDisplay() {
         // Update performance monitor if available
         if (this.performanceMonitor && this.performanceStats) {
-            // Calculate average FPS
-            const currentTime = performance.now();
-            const deltaTime = currentTime - this.lastFrameTime;
-            this.lastFrameTime = currentTime;
-
-            this.fpsHistory.shift();
-            this.fpsHistory.push(1000 / deltaTime);
-
+            // Calculate average FPS from history
             const avgFps = this.fpsHistory.reduce((sum, fps) => sum + fps, 0) / this.fpsHistory.length;
 
             // Update FPS counter
             this.performanceStats.fps = `${Math.round(avgFps)} FPS`;
 
-            // Update physics updates counter
-            this.performanceStats.physics = `${Math.round(this.physicsUpdatesPerSecond)} updates/s`;
+            // Update physics updates counter - use exact configured value
+            if (this.simulationApp) {
+                // Display the exact configured rate
+                this.performanceStats.physics = `${this.simulationApp.config.updateRate} updates/s`;
+            } else {
+                this.performanceStats.physics = `60 updates/s`;
+            }
 
             // Update cell count if simulation is available
             if (this.simulationApp && this.simulationApp.physicsEngine) {
@@ -338,62 +294,20 @@ class GUI {
         }
     }
 
-    resetToDefaults() {
-        // Reset to default values from window.params
-        this.params.controls = { ...window.params.controls };
-
-        // Apply to UI and simulation
-        if (this.simulationApp) {
-            // Update visualization mode
-            if (this.simulationApp.renderer) {
-                this.simulationApp.renderer.setVisualizationMode(this.params.controls.visualizationMode);
-
-                // Convert contrast value
-                const normalizedValue = (this.params.controls.contrast - 1) / 99;
-                const contrastValue = Math.pow(2, normalizedValue * 4);
-                this.simulationApp.renderer.setContrastValue(contrastValue);
-
-                // Convert low clip value
-                this.simulationApp.renderer.setLowClipValue(this.params.controls.lowClip / 100);
-
-                // Set resolution
-                this.simulationApp.setResolution(this.params.controls.resolution);
-            }
-
-            // Update physics settings
-            if (this.simulationApp.physicsEngine) {
-                if (this.simulationApp.physicsEngine.source) {
-                    this.simulationApp.physicsEngine.source.setFrequency(this.params.controls.frequency);
-                }
-
-                // Apply air absorption
-                const airAbsValue = (this.params.controls.airAbsorption / 100) * this.params.medium.maxAirAbsorption;
-                this.simulationApp.physicsEngine.setAirAbsorption(airAbsValue);
-
-                // Apply wall absorption
-                this.simulationApp.physicsEngine.setWallAbsorption(this.params.controls.wallAbsorption / 100);
-            }
-
-            // Set pause state
-            if (this.params.controls.paused) {
-                this.simulationApp.pause();
-            } else {
-                this.simulationApp.resume();
-            }
-        }
-
-        // Update the pane to reflect new values
-        if (this.pane) {
-            this.pane.refresh();
-        }
-
-        // Save default params
-        this.saveParams();
-    }
-
     render() {
         // Update performance stats
         this.frameCount++;
+
+        // Calculate current FPS on every frame for accuracy
+        const currentTime = performance.now();
+        const frameDelta = currentTime - this.lastFrameTime;
+        this.lastFrameTime = currentTime;
+
+        // Add current frame rate to history
+        this.fpsHistory.shift();
+        this.fpsHistory.push(1000 / frameDelta);
+
+        // Only update the display every 10 frames to avoid UI thrashing
         if (this.frameCount % 10 === 0) {
             this.updateDisplay();
         }
@@ -408,6 +322,94 @@ class GUI {
             this.pane = null;
         }
         this.performanceMonitor = null;
+    }
+
+    /**
+     * Set up draggable GUI functionality
+     */
+    setupDraggableGUI() {
+        const guiContainer = document.getElementById('gui-container');
+        if (!guiContainer) return;
+
+        // Load saved position
+        try {
+            const savedPosition = localStorage.getItem('wave-sim-gui-position');
+            if (savedPosition) {
+                const position = JSON.parse(savedPosition);
+                guiContainer.style.top = `${position.top}px`;
+                guiContainer.style.right = `${position.right}px`;
+            }
+        } catch (e) {
+            console.error('Error loading GUI state:', e);
+        }
+
+        // Simple drag implementation with right-based positioning
+        let isDragging = false;
+        let hasMoved = false;
+        let startX, startY, startRight, startTop;
+
+        // Make the whole container draggable by the Tweakpane title bar
+        guiContainer.addEventListener('mousedown', (e) => {
+            // Only start dragging if we're clicking on the title bar element
+            if (!e.target.closest('.tp-rotv_t')) return;
+
+            const rect = guiContainer.getBoundingClientRect();
+            isDragging = true;
+            hasMoved = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            startRight = window.innerWidth - rect.right;
+            startTop = rect.top;
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            // Calculate movement deltas
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            // Only consider it a move if it's moved more than 3 pixels in any direction
+            if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+                hasMoved = true;
+            }
+
+            // Update position - maintain right anchor
+            const newRight = Math.max(10, startRight - deltaX);
+            const newTop = Math.max(10, startTop + deltaY);
+
+            guiContainer.style.right = `${newRight}px`;
+            guiContainer.style.top = `${newTop}px`;
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+
+            // If the user has moved the panel, prevent the click event from triggering fold/unfold
+            if (hasMoved) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Prevent the subsequent click event from being processed
+                const titleBar = guiContainer.querySelector('.tp-rotv_t');
+                if (titleBar) {
+                    const preventNextClick = (clickEvent) => {
+                        clickEvent.preventDefault();
+                        clickEvent.stopPropagation();
+                        titleBar.removeEventListener('click', preventNextClick, true);
+                    };
+                    titleBar.addEventListener('click', preventNextClick, true);
+                }
+            }
+
+            isDragging = false;
+            const rect = guiContainer.getBoundingClientRect();
+            localStorage.setItem('wave-sim-gui-position', JSON.stringify({
+                top: rect.top,
+                right: window.innerWidth - rect.right
+            }));
+        });
     }
 }
 

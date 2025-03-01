@@ -13,34 +13,21 @@
         body {
             margin: 0;
             padding: 0;
-            display: flex;
             background: #000;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
         }
 
-        #controls-container {
-            width: 400px;
-            height: 100vh;
-            background: #1a1a1a;
-            position: relative;
-            border-right: 1px solid #333;
-            flex-shrink: 0;
-            z-index: 10; /* Ensure controls are above simulation */
-        }
-
         #simulation-container {
-            flex: 1;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
             height: 100vh;
             margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             background: #000;
             overflow: hidden;
-            position: relative;
-            width: 100%;
             z-index: 5;
         }
 
@@ -53,36 +40,33 @@
             object-fit: contain;
         }
 
-        #pane-container {
+        #gui-container {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 400px;
-            height: 100%;
-            z-index: 20;
-            pointer-events: auto;
-            overflow-y: auto;
-            padding: 10px;
+            top: 20px;
+            right: 20px;
+            left: initial;
+            width: 320px;
+            z-index: 10;
         }
 
-        .wrapper {
-            display: flex;
-            flex: 1;
-            height: 100vh;
-            background: #000;
+        /* Style the Tweakpane title bar to indicate it's draggable */
+        #gui-container .tp-rotv_t {
+            cursor: grab;
+        }
+
+        #gui-container .tp-rotv_t:active {
+            cursor: grabbing;
         }
     </style>
 </head>
 
 <body>
-    <!-- Left side - Controls -->
-    <div id="controls-container">
-        <div id="pane-container"></div>
-    </div>
+    <!-- Full screen simulation container -->
+    <div id="simulation-container"></div>
 
-    <!-- Right side - Simulation wrapper -->
-    <div class="wrapper">
-        <div id="simulation-container"></div>
+    <!-- Draggable GUI container -->
+    <div id="gui-container">
+        <!-- Tweakpane will be inserted here directly -->
     </div>
 
     <!-- Load configuration first -->

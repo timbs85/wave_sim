@@ -31,4 +31,4 @@ python -m http.server
 Visit `http://localhost:8000`
 
 ## Technical
-Built with custom JavaScript implementation using FDTD (Finite-Difference Time-Domain) calculations and ImGui for the interface.
+Built with custom JavaScript implementation using FDTD (Finite-Difference Time-Domain) calculations and Tweakpane for the interface.

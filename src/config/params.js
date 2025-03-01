@@ -40,7 +40,7 @@ const params = {
         frequency: 440,           // Hz (concert A)
         contrast: 50,             // %
         lowClip: 0,              // %
-        resolution: 8,            // pixels per cell
+        resolution: 2,            // Fixed at medium quality (not user-configurable)
         visualizationMode: 'pressure', // 'pressure' or 'intensity'
         paused: false            // simulation running state
     },

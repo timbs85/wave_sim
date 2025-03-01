@@ -85,27 +85,11 @@ class AppManager {
     }
 
     /**
-     * Change the simulation resolution
+     * Change the simulation resolution - now resolution is fixed
      */
     async changeResolution(resolution) {
-        if (!this.simManager) return null;
-
-        // Temporarily set simulation to null to indicate it's being reinitialized
-        const oldSimulation = window.simulation;
-        window.simulation = null;
-
-        try {
-            // Use the simulation manager's resolution change method
-            const newSimulation = await this.simManager.changeResolution(resolution);
-            window.simulation = newSimulation;
-            window.simResolution = resolution;
-
-            return newSimulation;
-        } catch (error) {
-            console.error('Failed to change resolution:', error);
-            window.simulation = oldSimulation; // Restore old simulation on error
-            return oldSimulation;
-        }
+        console.log('Resolution is now fixed at medium quality (value 2)');
+        return window.simulation;
     }
 
     /**

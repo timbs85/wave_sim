@@ -20,7 +20,7 @@ async function initializeApp() {
         // Create and initialize the simulation app
         app = new SimulationApp({
             updateRate: 60,
-            simResolution: window.params?.controls?.resolution || 8,
+            simResolution: 2, // Fixed medium resolution
             visualizationMode: 'pressure',
             contrastValue: 1.0,
             lowClipValue: 0.0

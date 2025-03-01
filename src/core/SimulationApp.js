@@ -8,7 +8,7 @@ class SimulationApp {
     constructor(config = {}) {
         // Store configuration
         this.config = Object.assign({
-            updateRate: 60,
+            updateRate: 120,
             simResolution: 8,
             visualizationMode: 'pressure',
             contrastValue: 1.0,
@@ -38,6 +38,10 @@ class SimulationApp {
      */
     async initialize() {
         try {
+            // Force fixed physics update rate of 120Hz
+            this.config.updateRate = 120;
+            this.updateInterval = 1000 / this.config.updateRate;
+
             // Initialize physics engine
             await this.initializePhysicsEngine();
 
@@ -122,8 +126,10 @@ class SimulationApp {
         // Get the canvas element
         const container = document.getElementById('simulation-container');
         const canvas = document.createElement('canvas');
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
+
+        // Full screen canvas
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
         container.appendChild(canvas);
 
         // Create renderer with visualization settings
@@ -223,8 +229,8 @@ class SimulationApp {
     handleResize() {
         if (!this.renderer) return;
 
-        const container = document.getElementById('simulation-container');
-        this.renderer.resize(container.clientWidth, container.clientHeight);
+        // Full screen resize
+        this.renderer.resize(window.innerWidth, window.innerHeight);
     }
 
     /**
@@ -272,48 +278,20 @@ class SimulationApp {
 
     /**
      * Set simulation resolution
-     * Wrapper for changeResolution with better naming
+     * Now resolution is fixed at medium quality
      */
     setResolution(resolution) {
-        return this.changeResolution(resolution);
+        console.log('Resolution is now fixed at medium quality (value 2)');
+        return Promise.resolve();
     }
 
     /**
      * Change simulation resolution
+     * Now resolution is fixed at medium quality
      */
     async changeResolution(resolution) {
-        // Store current source position
-        const oldPhysicsEngine = this.physicsEngine;
-        const sourceNormalizedX = oldPhysicsEngine.source.x / oldPhysicsEngine.cols;
-        const sourceNormalizedY = oldPhysicsEngine.source.y / oldPhysicsEngine.rows;
-
-        // Update configuration
-        this.config.simResolution = resolution;
-        window.params.controls.resolution = resolution;
-
-        // Dispose old physics engine
-        oldPhysicsEngine.dispose();
-
-        // Create new physics engine
-        this.physicsEngine = new PhysicsEngine(window.params);
-
-        // Initialize the new physics engine
-        await this.physicsEngine.initialize(window.params.controls.frequency);
-
-        // Calculate new source position based on normalized coordinates
-        const newSourceX = Math.floor(sourceNormalizedX * this.physicsEngine.cols);
-        const newSourceY = Math.floor(sourceNormalizedY * this.physicsEngine.rows);
-
-        // Set source position
-        this.physicsEngine.setSource(newSourceX, newSourceY);
-
-        // Update renderer resolution
-        this.renderer.updateSettings({ simResolution: resolution });
-
-        // Update brightness scale for the new resolution
-        this.updateBrightnessScale(resolution);
-
-        return this.physicsEngine;
+        console.log('Resolution is now fixed at medium quality (value 2)');
+        return Promise.resolve();
     }
 
     /**

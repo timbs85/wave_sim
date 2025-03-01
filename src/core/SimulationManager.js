@@ -68,46 +68,9 @@ class SimulationManager {
         }
     }
 
-    // Method to safely change resolution
+    // Method to safely change resolution - now resolution is fixed
     async changeResolution(newResolution) {
-        // Stop the simulation loop
-        this.stop();
-
-        // Store current source position
-        const oldSimulation = this.simulation;
-        const sourceNormalizedX = oldSimulation.source.x / oldSimulation.cols;
-        const sourceNormalizedY = oldSimulation.source.y / oldSimulation.rows;
-
-        // Update params with new resolution
-        this.params.controls.resolution = newResolution;
-
-        // Dispose old simulation
-        oldSimulation.dispose();
-
-        // Create new simulation
-        this.simulation = new WaveSimulation(this.params);
-
-        // Wait for the simulation to initialize
-        await this.simulation.initialize(this.params.controls.frequency);
-
-        // Calculate new source position based on normalized coordinates
-        const newSourceX = Math.floor(sourceNormalizedX * this.simulation.cols);
-        const newSourceY = Math.floor(sourceNormalizedY * this.simulation.rows);
-
-        // Set source position
-        this.simulation.setSource(newSourceX, newSourceY);
-
-        // Update renderer brightness if available
-        if (window.renderer) {
-            const baseResolution = 8;
-            const resolutionRatio = baseResolution / newResolution;
-            const brightnessScale = resolutionRatio * resolutionRatio;
-            window.renderer.updateSettings({ brightnessScale });
-        }
-
-        // Restart the simulation loop
-        this.start();
-
+        console.log('Resolution is now fixed at medium quality (value 2)');
         return this.simulation;
     }
 
