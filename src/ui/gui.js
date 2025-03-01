@@ -260,13 +260,6 @@ class GUI {
                     lowClipValue: this.params.controls.lowClip / 100,
                     simResolution: this.params.controls.resolution
                 });
-            } else {
-                // Fallback to global variables for backward compatibility
-                window.visualizationMode = this.params.controls.visualizationMode;
-                window.paused = this.params.controls.paused;
-                window.contrastValue = Math.pow(2, (this.params.controls.contrast - 1) / 99 * 4);
-                window.lowClipValue = this.params.controls.lowClip / 100;
-                window.simResolution = this.params.controls.resolution;
             }
 
             this.initialized = true;
@@ -310,9 +303,6 @@ class GUI {
 
             // Check if we have a valid simulation
             if (this.simulationApp && this.simulationApp.physicsEngine) {
-                this.renderControls();
-            } else if (window.simManager && window.simulation) {
-                // Fallback to global variables for backward compatibility
                 this.renderControls();
             } else {
                 ImGui.Text("Simulation is being reinitialized...");
@@ -368,11 +358,6 @@ class GUI {
                     airAbs[0] / 100,
                     this.params.medium.maxAirAbsorption
                 );
-            } else if (window.simulation) {
-                window.simulation.setAirAbsorption(
-                    airAbs[0] / 100,
-                    this.params.medium.maxAirAbsorption
-                );
             }
 
             this.saveParams();
@@ -385,8 +370,6 @@ class GUI {
 
             if (this.simulationApp && this.simulationApp.physicsEngine) {
                 this.simulationApp.physicsEngine.setWallAbsorption(wallAbs[0] / 100);
-            } else if (window.simulation) {
-                window.simulation.setWallAbsorption(wallAbs[0] / 100);
             }
 
             this.saveParams();
@@ -400,8 +383,6 @@ class GUI {
             if (this.simulationApp) {
                 // Use the updated method that no longer applies amplitude scaling
                 this.simulationApp.setFrequency(freq[0]);
-            } else if (window.simulation) {
-                window.simulation.setFrequency(freq[0]);
             }
 
             this.saveParams();
@@ -431,8 +412,6 @@ class GUI {
 
             if (this.simulationApp && this.simulationApp.renderer) {
                 this.simulationApp.renderer.updateSettings({ contrastValue });
-            } else {
-                window.contrastValue = contrastValue;
             }
         }
 
@@ -444,8 +423,6 @@ class GUI {
 
             if (this.simulationApp && this.simulationApp.renderer) {
                 this.simulationApp.renderer.updateSettings({ lowClipValue });
-            } else {
-                window.lowClipValue = lowClipValue;
             }
         }
 
@@ -483,8 +460,6 @@ class GUI {
         if (ImGui.Button("Trigger Impulse", new ImGui.ImVec2(buttonWidth, 0))) {
             if (this.simulationApp && this.simulationApp.physicsEngine) {
                 this.simulationApp.physicsEngine.triggerImpulse();
-            } else if (window.simulation) {
-                window.simulation.triggerImpulse();
             }
         }
 
@@ -494,8 +469,6 @@ class GUI {
 
             if (this.simulationApp && this.simulationApp.renderer) {
                 this.simulationApp.setVisualizationMode(this.params.controls.visualizationMode);
-            } else {
-                window.visualizationMode = this.params.controls.visualizationMode;
             }
         }
 
@@ -505,8 +478,6 @@ class GUI {
 
             if (this.simulationApp) {
                 this.simulationApp.togglePause();
-            } else {
-                window.paused = this.params.controls.paused;
             }
         }
 
@@ -567,13 +538,6 @@ class GUI {
                         this.pressureHistory.push(currentPressure);
                     }
                 }
-            } else if (window.simulation && window.simulation.source) {
-                const source = window.simulation.source;
-                currentPressure = window.simulation.getPressure(source.x, source.y);
-
-                // Legacy update method
-                this.pressureHistory.shift();
-                this.pressureHistory.push(currentPressure);
             }
         }
 
