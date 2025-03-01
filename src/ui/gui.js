@@ -27,7 +27,7 @@ class GUI {
                     this.params.controls.lowClip = Math.round(settings.lowClipValue * 100);
                 }
 
-                // Resolution is now fixed at medium quality (2)
+                // Resolution is fixed at medium quality
             }
 
             // Sync physics settings
@@ -129,104 +129,102 @@ class GUI {
     }
 
     setupControls() {
-        // Add controls directly to the main pane without folders
+        // Helper function to create inputs with common patterns
+        const createControlInput = (paramKey, options, callback) => {
+            return this.pane.addInput(this.params.controls, paramKey, options)
+                .on('change', (ev) => {
+                    if (callback && this.simulationApp) {
+                        callback(ev.value);
+                        this.saveParams();
+                    }
+                });
+        };
 
         // Visualization mode dropdown
-        this.pane.addInput(this.params.controls, 'visualizationMode', {
+        createControlInput('visualizationMode', {
             options: {
                 Pressure: 'pressure',
                 Intensity: 'intensity'
             }
-        }).on('change', (ev) => {
-            if (this.simulationApp && this.simulationApp.renderer) {
-                this.simulationApp.renderer.setVisualizationMode(ev.value);
-                this.saveParams();
+        }, (value) => {
+            if (this.simulationApp.renderer) {
+                this.simulationApp.renderer.setVisualizationMode(value);
             }
         });
 
-        // Resolution is now fixed at medium quality
-
         // Pause button
-        this.pane.addInput(this.params.controls, 'paused', {
+        createControlInput('paused', {
             label: 'Pause Simulation'
-        }).on('change', (ev) => {
-            if (this.simulationApp) {
-                if (ev.value) {
-                    this.simulationApp.pause();
-                } else {
-                    this.simulationApp.resume();
-                }
-                this.saveParams();
+        }, (value) => {
+            if (value) {
+                this.simulationApp.pause();
+            } else {
+                this.simulationApp.resume();
             }
         });
 
         // Contrast slider
-        this.pane.addInput(this.params.controls, 'contrast', {
+        createControlInput('contrast', {
             min: 1,
             max: 100,
             step: 1
-        }).on('change', (ev) => {
-            if (this.simulationApp && this.simulationApp.renderer) {
+        }, (value) => {
+            if (this.simulationApp.renderer) {
                 // Convert slider value [1-100] to exponential contrast value [1-2^4]
-                const normalizedValue = (ev.value - 1) / 99;
+                const normalizedValue = (value - 1) / 99;
                 const contrastValue = Math.pow(2, normalizedValue * 4);
                 this.simulationApp.renderer.setContrastValue(contrastValue);
-                this.saveParams();
             }
         });
 
         // Low clip slider
-        this.pane.addInput(this.params.controls, 'lowClip', {
+        createControlInput('lowClip', {
             min: 0,
             max: 100,
             step: 1
-        }).on('change', (ev) => {
-            if (this.simulationApp && this.simulationApp.renderer) {
+        }, (value) => {
+            if (this.simulationApp.renderer) {
                 // Convert percentage [0-100] to [0-1]
-                const clipValue = ev.value / 100;
+                const clipValue = value / 100;
                 this.simulationApp.renderer.setLowClipValue(clipValue);
-                this.saveParams();
             }
         });
 
         // Frequency slider
-        this.pane.addInput(this.params.controls, 'frequency', {
+        createControlInput('frequency', {
             min: 20,
             max: 1000,
             step: 1
-        }).on('change', (ev) => {
-            if (this.simulationApp && this.simulationApp.physicsEngine &&
+        }, (value) => {
+            if (this.simulationApp.physicsEngine &&
                 this.simulationApp.physicsEngine.source) {
-                this.simulationApp.physicsEngine.source.setFrequency(ev.value);
-                this.saveParams();
+                this.simulationApp.physicsEngine.source.setFrequency(value);
             }
         });
 
         // Air absorption slider
-        this.pane.addInput(this.params.controls, 'airAbsorption', {
+        createControlInput('airAbsorption', {
             min: 0,
             max: 100,
             step: 1
-        }).on('change', (ev) => {
-            if (this.simulationApp && this.simulationApp.physicsEngine) {
+        }, (value) => {
+            if (this.simulationApp.physicsEngine) {
                 // Convert percentage to actual value
-                const absValue = (ev.value / 100) * this.params.medium.maxAirAbsorption;
+                const absValue = (value / 100) * this.params.medium.maxAirAbsorption;
                 this.simulationApp.physicsEngine.setAirAbsorption(absValue);
-                this.saveParams();
             }
         });
 
         // Wall absorption slider
-        this.pane.addInput(this.params.controls, 'wallAbsorption', {
+        createControlInput('wallAbsorption', {
             min: 0,
             max: 100,
             step: 1
-        }).on('change', (ev) => {
-            if (this.simulationApp && this.simulationApp.physicsEngine) {
+        }, (value) => {
+            if (this.simulationApp.physicsEngine) {
                 // Convert percentage to [0-1]
-                const absValue = ev.value / 100;
+                const absValue = value / 100;
                 this.simulationApp.physicsEngine.setWallAbsorption(absValue);
-                this.saveParams();
             }
         });
 
@@ -355,7 +353,10 @@ class GUI {
             hasMoved = false;
             startX = e.clientX;
             startY = e.clientY;
-            startRight = window.innerWidth - rect.right;
+
+            // Calculate right position once
+            const windowWidth = window.innerWidth;
+            startRight = windowWidth - rect.right;
             startTop = rect.top;
             e.preventDefault();
         });
@@ -382,23 +383,6 @@ class GUI {
 
         document.addEventListener('mouseup', (e) => {
             if (!isDragging) return;
-
-            // If the user has moved the panel, prevent the click event from triggering fold/unfold
-            if (hasMoved) {
-                e.preventDefault();
-                e.stopPropagation();
-
-                // Prevent the subsequent click event from being processed
-                const titleBar = guiContainer.querySelector('.tp-rotv_t');
-                if (titleBar) {
-                    const preventNextClick = (clickEvent) => {
-                        clickEvent.preventDefault();
-                        clickEvent.stopPropagation();
-                        titleBar.removeEventListener('click', preventNextClick, true);
-                    };
-                    titleBar.addEventListener('click', preventNextClick, true);
-                }
-            }
 
             isDragging = false;
             const rect = guiContainer.getBoundingClientRect();

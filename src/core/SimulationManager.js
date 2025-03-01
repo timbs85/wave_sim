@@ -5,6 +5,37 @@ class SimulationManager {
         this.updateInterval = 1000 / 60; // 60Hz default
         this.intervalId = null;
         this.params = params;  // Store params for recreation
+
+        // Create proxy methods dynamically
+        this.setupProxyMethods();
+    }
+
+    // Set up proxy methods for simulation
+    setupProxyMethods() {
+        // Methods to proxy through to the simulation
+        const methodsToProxy = [
+            'getPressure', 'getVelocity', 'setSource',
+            'triggerImpulse', 'setFrequency',
+            'setAirAbsorption', 'setWallAbsorption'
+        ];
+
+        // Create proxy methods
+        methodsToProxy.forEach(method => {
+            this[method] = (...args) => {
+                return this.simulation?.[method]?.(...args);
+            };
+        });
+
+        // Define getters using Object.defineProperties
+        Object.defineProperties(this, {
+            pressureField: { get: () => this.simulation?.pressureField },
+            geometry: { get: () => this.simulation?.geometry },
+            source: { get: () => this.simulation?.source },
+            cols: { get: () => this.simulation?.cols ?? 0 },
+            rows: { get: () => this.simulation?.rows ?? 0 },
+            width: { get: () => this.simulation?.width ?? 0 },
+            height: { get: () => this.simulation?.height ?? 0 }
+        });
     }
 
     async initialize(params) {
@@ -69,67 +100,8 @@ class SimulationManager {
     }
 
     // Method to safely change resolution - now resolution is fixed
-    async changeResolution(newResolution) {
-        console.log('Resolution is now fixed at medium quality (value 2)');
+    changeResolution(resolution) {
         return this.simulation;
-    }
-
-    // Proxy methods to simulation for compatibility
-    getPressure(x, y) {
-        return this.simulation?.getPressure(x, y) ?? 0;
-    }
-
-    getVelocity(x, y) {
-        return this.simulation?.getVelocity(x, y) ?? 0;
-    }
-
-    setSource(x, y) {
-        return this.simulation?.setSource(x, y) ?? false;
-    }
-
-    triggerImpulse() {
-        this.simulation?.triggerImpulse();
-    }
-
-    setFrequency(freq) {
-        this.simulation?.setFrequency(freq);
-    }
-
-    setAirAbsorption(value, maxAirAbsorption) {
-        this.simulation?.setAirAbsorption(value, maxAirAbsorption);
-    }
-
-    setWallAbsorption(value) {
-        this.simulation?.setWallAbsorption(value);
-    }
-
-    // Proxy getters for compatibility
-    get pressureField() {
-        return this.simulation?.pressureField;
-    }
-
-    get geometry() {
-        return this.simulation?.geometry;
-    }
-
-    get source() {
-        return this.simulation?.source;
-    }
-
-    get cols() {
-        return this.simulation?.cols ?? 0;
-    }
-
-    get rows() {
-        return this.simulation?.rows ?? 0;
-    }
-
-    get width() {
-        return this.simulation?.width ?? 0;
-    }
-
-    get height() {
-        return this.simulation?.height ?? 0;
     }
 }
 

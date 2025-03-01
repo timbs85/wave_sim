@@ -10,7 +10,6 @@ let app;
 
 // Initialize the application when the DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing wave simulation...');
     initializeApp();
 });
 
@@ -43,16 +42,6 @@ async function initializeApp() {
                 app.dispose();
             }
         });
-
-        // Define p5.js compatibility functions
-        // These are needed for any code that might still expect p5.js functions
-        window.windowResized = () => {
-            if (app) {
-                app.handleResize();
-            }
-        };
-
-        console.log('Wave simulation initialized successfully');
     } catch (error) {
         console.error('Failed to initialize application:', error);
     }

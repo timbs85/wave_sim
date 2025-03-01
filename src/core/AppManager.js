@@ -12,27 +12,50 @@ class AppManager {
     }
 
     /**
+     * Expose components to global scope for debugging/compatibility
+     */
+    exposeGlobals(components = {}) {
+        // Set default components from instance
+        const globalsToExpose = {
+            gui: this.gui,
+            simManager: this.simManager,
+            simulation: this.simManager?.simulation,
+            ...components
+        };
+
+        // Expose each component to window
+        Object.entries(globalsToExpose).forEach(([key, value]) => {
+            if (value !== undefined) {
+                window[key] = value;
+            }
+        });
+    }
+
+    /**
+     * Clear global references
+     */
+    clearGlobals(keys = ['gui', 'simManager', 'simulation']) {
+        keys.forEach(key => {
+            window[key] = null;
+        });
+    }
+
+    /**
      * Initialize the entire application
      */
     async initialize() {
         try {
-            console.log('Initializing application...');
-
             // First initialize the simulation
             await this.initializeSimulation();
-            console.log('Simulation initialization complete');
 
             // Then initialize the GUI with the simulation already available
             this.gui = new GUI();
             await this.gui.init();
-            console.log('GUI initialization complete');
 
             // Make components globally accessible
-            window.gui = this.gui;
+            this.exposeGlobals();
 
             this.initialized = true;
-            console.log('Application initialization complete');
-
             return true;
         } catch (error) {
             console.error('Failed to initialize application:', error);
@@ -78,8 +101,7 @@ class AppManager {
         await this.simManager.initialize(simParams);  // Wait for initialization to complete
 
         // Make simulation globally accessible
-        window.simManager = this.simManager;
-        window.simulation = this.simManager.simulation;
+        this.exposeGlobals();
 
         return this.simManager;
     }
@@ -88,8 +110,8 @@ class AppManager {
      * Change the simulation resolution - now resolution is fixed
      */
     async changeResolution(resolution) {
-        console.log('Resolution is now fixed at medium quality (value 2)');
-        return window.simulation;
+        // Resolution is fixed at medium quality
+        return this.simManager?.simulation;
     }
 
     /**
@@ -97,11 +119,11 @@ class AppManager {
      */
     async reinitializeSimulation(newParams) {
         // Temporarily set simulation to null to indicate it's being reinitialized
-        window.simulation = null;
+        this.clearGlobals(['simulation']);
 
         try {
             await this.initializeSimulation(newParams);
-            return window.simulation;
+            return this.simManager.simulation;
         } catch (error) {
             console.error('Failed to reinitialize simulation:', error);
             return null;
@@ -117,8 +139,8 @@ class AppManager {
             this.simManager = null;
         }
 
-        window.simManager = null;
-        window.simulation = null;
+        // Remove global references
+        this.clearGlobals();
     }
 }
 

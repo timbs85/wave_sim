@@ -13,7 +13,7 @@ Interactive 2D sound wave propagation simulator.
   - Resolution
 
 ## Demo
-[Live demo](https://github.com/timbs85/wave_sim)
+Live demo currently unavailable - run locally using the setup instructions below.
 
 ## Usage
 - **Left click**: Place sound source

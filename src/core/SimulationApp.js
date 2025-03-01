@@ -194,10 +194,25 @@ class SimulationApp {
      * Handle window resize
      */
     handleResize() {
-        if (!this.renderer) return;
+        // Handle window resize
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return;
 
-        // Full screen resize
-        this.renderer.resize(window.innerWidth, window.innerHeight);
+        // Cache innerWidth/innerHeight
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        // Set canvas size
+        canvas.width = windowWidth;
+        canvas.height = windowHeight;
+
+        // Resize renderer
+        if (this.renderer) {
+            this.renderer.resize(windowWidth, windowHeight);
+        }
+
+        // Redraw
+        this.render();
     }
 
     /**
@@ -244,21 +259,11 @@ class SimulationApp {
     }
 
     /**
-     * Set simulation resolution
-     * Now resolution is fixed at medium quality
-     */
-    setResolution(resolution) {
-        console.log('Resolution is now fixed at medium quality (value 2)');
-        return Promise.resolve();
-    }
-
-    /**
      * Change simulation resolution
      * Now resolution is fixed at medium quality
      */
-    async changeResolution(resolution) {
-        console.log('Resolution is now fixed at medium quality (value 2)');
-        return Promise.resolve();
+    changeResolution(resolution) {
+        return this.simulation;
     }
 
     /**
@@ -266,27 +271,32 @@ class SimulationApp {
      */
     dispose() {
         // Stop animation loop
-        this.stopAnimationLoop();
-
-        // Dispose input handler
-        if (this.inputHandler) {
-            this.inputHandler.dispose();
-            this.inputHandler = null;
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
         }
 
-        // Dispose physics engine
+        // Dispose of components
         if (this.physicsEngine) {
             this.physicsEngine.dispose();
             this.physicsEngine = null;
         }
 
-        // Dispose GUI if available
-        if (this.gui && typeof this.gui.dispose === 'function') {
-            this.gui.dispose();
-            this.gui = null;
+        if (this.renderer) {
+            this.renderer.dispose();
+            this.renderer = null;
         }
 
-        console.log('Application disposed');
+        if (this.inputHandler) {
+            this.inputHandler.dispose();
+            this.inputHandler = null;
+        }
+
+        // Clear canvas
+        const container = document.getElementById('simulation-container');
+        if (container) {
+            container.innerHTML = '';
+        }
     }
 
     /**
@@ -297,17 +307,6 @@ class SimulationApp {
 
         // Set the frequency in the physics engine
         this.physicsEngine.setFrequency(freq);
-    }
-
-    /**
-     * Stop the animation loop
-     */
-    stopAnimationLoop() {
-        if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
-            this.animationFrameId = null;
-            console.log('Animation loop stopped');
-        }
     }
 }
 
