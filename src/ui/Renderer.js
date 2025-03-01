@@ -15,8 +15,8 @@ class Renderer {
         this.contrastValue = config.contrastValue || 1.0;
         this.lowClipValue = config.lowClipValue || 0.0;
         this.visualizationMode = config.visualizationMode || 'pressure';
-        this.simResolution = config.simResolution || 8;
-        this.brightnessScale = config.brightnessScale || 1.0;
+        this.simResolution = config.simResolution || 2; // Fixed at medium quality
+        this.brightnessScale = config.brightnessScale || 16; // Fixed brightness for medium resolution
 
         // Initialize color lookup tables
         this.PRESSURE_STEPS = 1024;

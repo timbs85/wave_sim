@@ -64,7 +64,7 @@ class AppManager {
             medium: window.params.medium,
             controls: {
                 ...window.params.controls,
-                resolution: window.simResolution || 8
+                resolution: 2 // Fixed at medium quality
             }
         };
 

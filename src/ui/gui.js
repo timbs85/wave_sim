@@ -27,10 +27,7 @@ class GUI {
                     this.params.controls.lowClip = Math.round(settings.lowClipValue * 100);
                 }
 
-                // Sync resolution
-                if (settings.simResolution) {
-                    this.params.controls.resolution = settings.simResolution;
-                }
+                // Resolution is now fixed at medium quality (2)
             }
 
             // Sync physics settings

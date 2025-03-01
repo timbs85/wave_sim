@@ -9,7 +9,7 @@ class SimulationApp {
         // Store configuration
         this.config = Object.assign({
             updateRate: 120,
-            simResolution: 8,
+            simResolution: 2, // Fixed medium resolution
             visualizationMode: 'pressure',
             contrastValue: 1.0,
             lowClipValue: 0.0
@@ -86,37 +86,7 @@ class SimulationApp {
         // Initialize the physics engine
         await this.physicsEngine.initialize(window.params.controls.frequency);
 
-        // Calculate brightness scale for renderer based on resolution
-        this.updateBrightnessScale(this.config.simResolution);
-
         return this.physicsEngine;
-    }
-
-    /**
-     * Update brightness scale for renderer based on resolution
-     * This only affects the visual display, not the simulation
-     */
-    updateBrightnessScale(resolution) {
-        if (!this.renderer) return;
-
-        // Calculate brightness scaling factor based on resolution
-        const baseResolution = 8;
-        const resolutionRatio = baseResolution / resolution;
-        const brightnessScale = resolutionRatio * resolutionRatio;
-
-        // Apply the scaling factor to the renderer
-        this.renderer.updateSettings({ brightnessScale });
-
-        console.log(`Applied brightness scaling: ${brightnessScale.toFixed(2)}x for resolution ${resolution}px`);
-    }
-
-    /**
-     * Apply amplitude scaling based on resolution
-     * This only affects the simulation, not the GUI display
-     */
-    applyAmplitudeScaling(resolution) {
-        // This method is kept for backward compatibility but does nothing now
-        console.log(`Amplitude scaling removed: simulation now uses consistent amplitude regardless of resolution`);
     }
 
     /**
@@ -134,15 +104,12 @@ class SimulationApp {
 
         // Create renderer with visualization settings
         this.renderer = new Renderer(canvas, {
-            simResolution: this.config.simResolution,
+            simResolution: 2, // Fixed medium resolution
             visualizationMode: this.config.visualizationMode,
             contrastValue: this.config.contrastValue,
             lowClipValue: this.config.lowClipValue,
-            brightnessScale: 1.0 // Default brightness scale
+            brightnessScale: 16 // Fixed brightness for medium resolution
         });
-
-        // Update brightness scale based on resolution
-        this.updateBrightnessScale(this.config.simResolution);
 
         return this.renderer;
     }
