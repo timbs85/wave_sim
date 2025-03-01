@@ -236,6 +236,22 @@ class SimulationApp {
     }
 
     /**
+     * Pause the simulation
+     */
+    pause() {
+        this.isPaused = true;
+        return this.isPaused;
+    }
+
+    /**
+     * Resume the simulation
+     */
+    resume() {
+        this.isPaused = false;
+        return this.isPaused;
+    }
+
+    /**
      * Reset the simulation
      */
     async resetSimulation() {
@@ -252,6 +268,14 @@ class SimulationApp {
 
         this.renderer.updateSettings({ visualizationMode: mode });
         this.config.visualizationMode = mode;
+    }
+
+    /**
+     * Set simulation resolution
+     * Wrapper for changeResolution with better naming
+     */
+    setResolution(resolution) {
+        return this.changeResolution(resolution);
     }
 
     /**

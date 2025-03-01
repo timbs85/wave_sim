@@ -90,6 +90,27 @@ class Renderer {
     }
 
     /**
+     * Set visualization mode
+     */
+    setVisualizationMode(mode) {
+        this.visualizationMode = mode;
+    }
+
+    /**
+     * Set contrast value
+     */
+    setContrastValue(value) {
+        this.contrastValue = value;
+    }
+
+    /**
+     * Set low clip value
+     */
+    setLowClipValue(value) {
+        this.lowClipValue = value;
+    }
+
+    /**
      * Get current renderer settings
      */
     getSettings() {
