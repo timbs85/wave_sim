@@ -11,6 +11,12 @@ class Renderer {
         this.width = canvas.width;
         this.height = canvas.height;
 
+        // Create UI layer canvas
+        this.uiCanvas = document.createElement('canvas');
+        this.uiCanvas.width = canvas.width;
+        this.uiCanvas.height = canvas.height;
+        this.uiCtx = this.uiCanvas.getContext('2d');
+
         // Visualization settings
         this.contrastValue = config.contrastValue || 1.0;
         this.lowClipValue = config.lowClipValue || 0.0;
@@ -24,6 +30,7 @@ class Renderer {
 
         // Image data for direct pixel manipulation
         this.imageData = null;
+        this.wallsDrawn = false;
     }
 
     /**
@@ -131,6 +138,8 @@ class Renderer {
         this.height = height;
         this.canvas.width = width;
         this.canvas.height = height;
+        this.uiCanvas.width = width;
+        this.uiCanvas.height = height;
     }
 
     /**
@@ -199,6 +208,67 @@ class Renderer {
     }
 
     /**
+     * Draw walls and source on UI layer
+     */
+    drawUI(physicsEngine) {
+        const cols = physicsEngine.cols;
+        const rows = physicsEngine.rows;
+        const walls = physicsEngine.getWalls();
+        const source = physicsEngine.getSource();
+        const scaleFactor = this.getDisplayScale(cols, rows);
+        const { x: offsetX, y: offsetY } = this.getDisplayOffset(cols, rows, scaleFactor);
+
+        // Clear UI canvas
+        this.uiCtx.clearRect(0, 0, this.width, this.height);
+
+        // Draw walls
+        this.uiCtx.save();
+        this.uiCtx.translate(offsetX, offsetY);
+        this.uiCtx.scale(scaleFactor, scaleFactor);
+
+        for (let gridY = 0; gridY < rows; gridY++) {
+            for (let gridX = 0; gridX < cols; gridX++) {
+                const idx = gridX + gridY * cols;
+                if (walls[idx] > 0) {
+                    const isAnechoic = walls[idx] === 2;
+                    this.uiCtx.fillStyle = isAnechoic ? 'rgba(32, 32, 32, 0.25)' : 'rgba(128, 128, 128, 1)';
+                    this.uiCtx.fillRect(
+                        gridX * this.simResolution,
+                        gridY * this.simResolution,
+                        this.simResolution,
+                        this.simResolution
+                    );
+                }
+            }
+        }
+
+        // Draw source indicator
+        this.uiCtx.strokeStyle = 'yellow';
+        this.uiCtx.lineWidth = 1 / scaleFactor;
+        this.uiCtx.beginPath();
+        const sourceX = source.x * this.simResolution;
+        const sourceY = source.y * this.simResolution;
+        const sourceDiameter = Math.max(8, this.simResolution);
+        this.uiCtx.arc(
+            sourceX + this.simResolution / 2,
+            sourceY + this.simResolution / 2,
+            sourceDiameter / 2,
+            0,
+            Math.PI * 2
+        );
+        this.uiCtx.stroke();
+
+        this.uiCtx.restore();
+    }
+
+    /**
+     * Update UI elements (walls and source)
+     */
+    updateUI(physicsEngine) {
+        this.drawUI(physicsEngine);
+    }
+
+    /**
      * Render the simulation
      */
     render(physicsEngine, deltaTime = 16.67) {
@@ -206,8 +276,6 @@ class Renderer {
 
         const cols = physicsEngine.cols;
         const rows = physicsEngine.rows;
-        const walls = physicsEngine.getWalls();
-        const source = physicsEngine.getSource();
 
         // Clear the canvas
         this.ctx.fillStyle = 'black';
@@ -218,8 +286,6 @@ class Renderer {
         const imageHeight = rows * this.simResolution;
         if (!this.imageData || this.imageData.width !== imageWidth || this.imageData.height !== imageHeight) {
             this.imageData = new ImageData(imageWidth, imageHeight);
-
-            // Initialize previous pressure field for interpolation
             if (!this.prevPressureField) {
                 this.prevPressureField = new Float32Array(cols * rows);
             }
@@ -238,59 +304,53 @@ class Renderer {
         const currentLookup = this.colorLookup[this.visualizationMode];
         const pixels = new Uint8Array(this.imageData.data.buffer);
 
-        // Calculate interpolation factor for smooth transitions between physics updates
-        // This is based on the accumulator in SimulationApp
+        // Calculate interpolation factor
         const interpolationFactor = physicsEngine.simulationApp ?
             Math.min(1.0, physicsEngine.simulationApp.physicsAccumulator / physicsEngine.simulationApp.updateInterval) : 0;
 
-        // Update pixel buffer - working directly in simulation grid coordinates
+        // Update pixel buffer
         for (let gridY = 0; gridY < rows; gridY++) {
             for (let gridX = 0; gridX < cols; gridX++) {
                 const idx = gridX + gridY * cols;
-
-                // Determine cell color
-                let r, g, b, a;
-                if (walls[idx] > 0) {
-                    // Wall cell
-                    const isAnechoic = walls[idx] === 2;
-                    r = g = b = isAnechoic ? 32 : 128;
-                    a = isAnechoic ? 64 : 255;
-                } else {
-                    // Pressure cell - use same grid coordinates for pressure sampling
-                    const currentPressure = physicsEngine.getPressure(gridX, gridY);
-
-                    // Store current pressure for next frame's interpolation
-                    const prevPressure = this.prevPressureField ? this.prevPressureField[idx] || 0 : 0;
-
-                    // Interpolate between previous and current pressure
-                    let pressure = currentPressure;
-                    if (this.prevPressureField && interpolationFactor > 0) {
-                        pressure = prevPressure + (currentPressure - prevPressure) * interpolationFactor;
-                    }
-
-                    // Update previous pressure field for next frame
-                    if (this.prevPressureField) {
-                        this.prevPressureField[idx] = currentPressure;
-                    }
-
-                    const lookupIdx = this.getPressureColorIndex(pressure) * 4;
-                    r = currentLookup[lookupIdx];
-                    g = currentLookup[lookupIdx + 1];
-                    b = currentLookup[lookupIdx + 2];
-                    a = currentLookup[lookupIdx + 3];
-                }
-
-                // Fill the cell's pixels
                 const cellStartX = gridX * this.simResolution;
                 const cellStartY = gridY * this.simResolution;
+
                 for (let py = 0; py < this.simResolution; py++) {
                     const rowOffset = ((cellStartY + py) * imageWidth + cellStartX) * 4;
                     for (let px = 0; px < this.simResolution; px++) {
+                        const fx = px / this.simResolution;
+                        const fy = py / this.simResolution;
+
+                        let pressure;
+                        if (gridX > 0 && gridX < cols - 1 && gridY > 0 && gridY < rows - 1) {
+                            const p00 = physicsEngine.getPressure(gridX, gridY);
+                            const p10 = physicsEngine.getPressure(gridX + 1, gridY);
+                            const p01 = physicsEngine.getPressure(gridX, gridY + 1);
+                            const p11 = physicsEngine.getPressure(gridX + 1, gridY + 1);
+
+                            const p0 = p00 * (1 - fx) + p10 * fx;
+                            const p1 = p01 * (1 - fx) + p11 * fx;
+                            pressure = p0 * (1 - fy) + p1 * fy;
+                        } else {
+                            pressure = physicsEngine.getPressure(gridX, gridY);
+                        }
+
+                        const prevPressure = this.prevPressureField ? this.prevPressureField[idx] || 0 : 0;
+                        let interpolatedPressure = pressure;
+                        if (this.prevPressureField && interpolationFactor > 0) {
+                            interpolatedPressure = prevPressure + (pressure - prevPressure) * interpolationFactor;
+                        }
+
+                        if (this.prevPressureField) {
+                            this.prevPressureField[idx] = interpolatedPressure;
+                        }
+
+                        const lookupIdx = this.getPressureColorIndex(interpolatedPressure) * 4;
                         const pixelOffset = rowOffset + px * 4;
-                        pixels[pixelOffset] = r;
-                        pixels[pixelOffset + 1] = g;
-                        pixels[pixelOffset + 2] = b;
-                        pixels[pixelOffset + 3] = a;
+                        pixels[pixelOffset] = currentLookup[lookupIdx];
+                        pixels[pixelOffset + 1] = currentLookup[lookupIdx + 1];
+                        pixels[pixelOffset + 2] = currentLookup[lookupIdx + 2];
+                        pixels[pixelOffset + 3] = currentLookup[lookupIdx + 3];
                     }
                 }
             }
@@ -303,8 +363,7 @@ class Renderer {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.putImageData(this.imageData, 0, 0);
 
-        // Clear and draw scaled image
-        this.ctx.clearRect(0, 0, this.width, this.height);
+        // Draw pressure field
         this.ctx.drawImage(
             tempCanvas,
             offsetX, offsetY,
@@ -312,19 +371,8 @@ class Renderer {
             imageHeight * scaleFactor
         );
 
-        // Draw source indicator
-        this.ctx.save();
-        this.ctx.translate(offsetX, offsetY);
-        this.ctx.scale(scaleFactor, scaleFactor);
-        this.ctx.strokeStyle = 'yellow';
-        this.ctx.lineWidth = 1 / scaleFactor;
-        this.ctx.beginPath();
-        const sourceX = (source.x + 0.5) * this.simResolution;
-        const sourceY = (source.y + 0.5) * this.simResolution;
-        const sourceDiameter = Math.max(8, this.simResolution / 2);
-        this.ctx.arc(sourceX, sourceY, sourceDiameter / 2, 0, Math.PI * 2);
-        this.ctx.stroke();
-        this.ctx.restore();
+        // Draw UI layer
+        this.ctx.drawImage(this.uiCanvas, 0, 0);
     }
 }
 

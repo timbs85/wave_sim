@@ -193,7 +193,7 @@ class GUI {
         // Frequency slider
         createControlInput('frequency', {
             min: 20,
-            max: 1000,
+            max: 250,
             step: 1
         }, (value) => {
             if (this.simulationApp.physicsEngine &&

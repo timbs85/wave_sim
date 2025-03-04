@@ -86,6 +86,13 @@ class SimulationApp {
         // Initialize the physics engine
         await this.physicsEngine.initialize(window.params.controls.frequency);
 
+        // Set up wall change notification
+        this.physicsEngine.onWallsChanged = () => {
+            if (this.renderer) {
+                this.renderer.updateUI(this.physicsEngine);
+            }
+        };
+
         return this.physicsEngine;
     }
 
@@ -110,6 +117,11 @@ class SimulationApp {
             lowClipValue: this.config.lowClipValue,
             brightnessScale: 16 // Fixed brightness for medium resolution
         });
+
+        // Initialize UI layer
+        if (this.physicsEngine) {
+            this.renderer.updateUI(this.physicsEngine);
+        }
 
         return this.renderer;
     }
@@ -209,6 +221,10 @@ class SimulationApp {
         // Resize renderer
         if (this.renderer) {
             this.renderer.resize(windowWidth, windowHeight);
+            // Update UI after resize
+            if (this.physicsEngine) {
+                this.renderer.updateUI(this.physicsEngine);
+            }
         }
 
         // Redraw

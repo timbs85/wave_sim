@@ -119,6 +119,10 @@ class InputHandler {
             // Set the source position and trigger an impulse
             if (physicsEngine.setSource(simPos.x, simPos.y)) {
                 physicsEngine.triggerImpulse();
+                // Update UI to show new source position
+                if (this.simulationApp.renderer) {
+                    this.simulationApp.renderer.updateUI(physicsEngine);
+                }
             }
         }
     }

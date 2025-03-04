@@ -50,6 +50,14 @@ class PhysicsEngine {
 
         this.isInitialized = false;
         this.isDisposed = false;
+
+        // Set up wall change notification
+        this.onWallsChanged = null;
+        this.geometry.onWallsChanged = () => {
+            if (this.onWallsChanged) {
+                this.onWallsChanged();
+            }
+        };
     }
 
     /**

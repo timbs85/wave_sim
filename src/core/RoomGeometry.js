@@ -4,6 +4,7 @@ class RoomGeometry {
         this.rows = rows;
         this.walls = new Uint8Array(cols * rows);
         this.roomParams = roomParams;
+        this.onWallsChanged = null; // Callback for wall changes
         this.createLayout();
     }
 
@@ -27,6 +28,11 @@ class RoomGeometry {
         const doorY = Math.floor((this.rows - doorHeight) / 2);
         for (let j = doorY; j < doorY + doorHeight; j++) {
             this.walls[(roomX + roomWidth) + j * this.cols] = 0;
+        }
+
+        // Notify that walls have changed
+        if (this.onWallsChanged) {
+            this.onWallsChanged();
         }
     }
 
@@ -52,4 +58,4 @@ class RoomGeometry {
     getWalls() {
         return this.walls;
     }
-} 
+}
