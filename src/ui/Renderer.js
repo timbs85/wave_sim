@@ -248,10 +248,10 @@ class Renderer {
         this.uiCtx.beginPath();
         const sourceX = source.x * this.simResolution;
         const sourceY = source.y * this.simResolution;
-        const sourceDiameter = Math.max(8, this.simResolution);
+        const sourceDiameter = Math.max(8, this.simResolution / 2);
         this.uiCtx.arc(
-            sourceX + this.simResolution / 2,
-            sourceY + this.simResolution / 2,
+            sourceX + this.simResolution / 2 - 0.5,  // Slight left adjustment
+            sourceY + this.simResolution / 2 - 0.5,  // Slight up adjustment
             sourceDiameter / 2,
             0,
             Math.PI * 2
@@ -342,7 +342,7 @@ class Renderer {
                         }
 
                         if (this.prevPressureField) {
-                            this.prevPressureField[idx] = interpolatedPressure;
+                            this.prevPressureField[idx] = pressure;
                         }
 
                         const lookupIdx = this.getPressureColorIndex(interpolatedPressure) * 4;
@@ -362,6 +362,10 @@ class Renderer {
         tempCanvas.height = imageHeight;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.putImageData(this.imageData, 0, 0);
+
+        // Enable image smoothing for the main context
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
 
         // Draw pressure field
         this.ctx.drawImage(

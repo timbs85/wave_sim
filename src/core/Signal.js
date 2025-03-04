@@ -101,4 +101,4 @@ class Signal {
     setType(type) {
         this.type = type;
     }
-} 
+}
