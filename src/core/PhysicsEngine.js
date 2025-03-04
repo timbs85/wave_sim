@@ -34,7 +34,11 @@ class PhysicsEngine {
             params.physics.minPressureThreshold
         );
 
-        this.source = new WaveSource({
+        // Create array for multiple sources
+        this.sources = [];
+
+        // Add initial source
+        this.addSource({
             cols: this.cols,
             rows: this.rows,
             dx: this.dx,
@@ -43,6 +47,9 @@ class PhysicsEngine {
             x: Math.floor(this.cols * params.source.defaultX),
             y: Math.floor(this.rows * params.source.defaultY)
         });
+
+        // Keep a reference to current source for backward compatibility
+        this.source = this.sources[0];
 
         // Medium properties
         this.wallAbsorption = params.controls.wallAbsorption / 100;
@@ -96,24 +103,79 @@ class PhysicsEngine {
             this.airAbsorption
         );
 
-        // Update source
-        if (this.source.isActive) {
-            this.source.updateSource(this.pressureField, this.dt);
+        // Update all sources
+        for (const source of this.sources) {
+            if (source.isActive) {
+                source.updateSource(this.pressureField, this.dt);
+            }
         }
+    }
+
+    /**
+     * Add a new source to the simulation
+     */
+    addSource(params) {
+        const source = new WaveSource(params);
+        this.sources.push(source);
+        return this.sources.length - 1; // Return the index of the new source
+    }
+
+    /**
+     * Get all sources
+     */
+    getSources() {
+        return this.sources;
     }
 
     /**
      * Set the source position
      */
     setSource(gridX, gridY) {
-        return this.source.setPosition(gridX, gridY, this.geometry.getWalls());
+        return this.source.setPosition(gridX, gridY);
+    }
+
+    /**
+     * Move a specific source to a new position
+     */
+    moveSource(sourceIndex, gridX, gridY) {
+        if (sourceIndex >= 0 && sourceIndex < this.sources.length) {
+            return this.sources[sourceIndex].setPosition(gridX, gridY);
+        }
+        return false;
+    }
+
+    /**
+     * Check if a point is close to any source
+     * Returns the index of the closest source if within threshold, or -1 if none found
+     */
+    findSourceNear(gridX, gridY, threshold = 3) {
+        let closestIdx = -1;
+        let closestDist = threshold * threshold;
+
+        for (let i = 0; i < this.sources.length; i++) {
+            const source = this.sources[i];
+            const dx = source.x - gridX;
+            const dy = source.y - gridY;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq < closestDist) {
+                closestDist = distSq;
+                closestIdx = i;
+            }
+        }
+
+        return closestIdx;
     }
 
     /**
      * Set the source frequency
      */
     setFrequency(freq) {
-        this.source.setFrequency(freq);
+        // Update all sources
+        for (const source of this.sources) {
+            source.setFrequency(freq);
+        }
+
         if (this.isInitialized) {
             this.triggerImpulse();
         }
@@ -134,14 +196,16 @@ class PhysicsEngine {
     }
 
     /**
-     * Trigger an impulse at the source
+     * Trigger an impulse at all sources
      */
     async triggerImpulse() {
         // Reset pressure field
         this.pressureField.reset();
 
-        // Trigger the source
-        this.source.trigger();
+        // Trigger all sources
+        for (const source of this.sources) {
+            source.trigger();
+        }
 
         return Promise.resolve();
     }

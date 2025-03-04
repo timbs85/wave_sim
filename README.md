@@ -6,6 +6,7 @@ Interactive 2D sound wave propagation simulator.
 - Real-time wave propagation
 - Adjustable walls and boundaries
 - Pressure and intensity visualisations
+- Multiple sound sources with distinct colours
 - Configurable parameters:
   - Frequency
   - Wall absorption
@@ -16,7 +17,8 @@ Interactive 2D sound wave propagation simulator.
 Live demo currently unavailable - run locally using the setup instructions below.
 
 ## Usage
-- **Left click**: Place sound source
+- **Left click on a source**: Select and drag source
+- **Shift+click**: Add a new sound source
 - **Space**: Pause/resume
 - **I**: Trigger impulse
 - **C**: Reset

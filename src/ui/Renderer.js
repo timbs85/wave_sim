@@ -214,7 +214,7 @@ class Renderer {
         const cols = physicsEngine.cols;
         const rows = physicsEngine.rows;
         const walls = physicsEngine.getWalls();
-        const source = physicsEngine.getSource();
+        const sources = physicsEngine.getSources();
         const scaleFactor = this.getDisplayScale(cols, rows);
         const { x: offsetX, y: offsetY } = this.getDisplayOffset(cols, rows, scaleFactor);
 
@@ -242,21 +242,30 @@ class Renderer {
             }
         }
 
-        // Draw source indicator
-        this.uiCtx.strokeStyle = 'yellow';
-        this.uiCtx.lineWidth = 1 / scaleFactor;
-        this.uiCtx.beginPath();
-        const sourceX = source.x * this.simResolution;
-        const sourceY = source.y * this.simResolution;
+        // Draw all source indicators
         const sourceDiameter = Math.max(8, this.simResolution / 2);
-        this.uiCtx.arc(
-            sourceX + this.simResolution / 2 - 0.5,  // Slight left adjustment
-            sourceY + this.simResolution / 2 - 0.5,  // Slight up adjustment
-            sourceDiameter / 2,
-            0,
-            Math.PI * 2
-        );
-        this.uiCtx.stroke();
+
+        for (let i = 0; i < sources.length; i++) {
+            const source = sources[i];
+
+            // Use different colors for each source
+            const sourceColors = ['yellow', 'cyan', 'magenta', 'lime', 'orange'];
+            this.uiCtx.strokeStyle = sourceColors[i % sourceColors.length];
+            this.uiCtx.lineWidth = 1 / scaleFactor;
+
+            this.uiCtx.beginPath();
+            const sourceX = source.x * this.simResolution;
+            const sourceY = source.y * this.simResolution;
+
+            this.uiCtx.arc(
+                sourceX + this.simResolution / 2 - 0.5,  // Slight left adjustment
+                sourceY + this.simResolution / 2 - 0.5,  // Slight up adjustment
+                sourceDiameter / 2,
+                0,
+                Math.PI * 2
+            );
+            this.uiCtx.stroke();
+        }
 
         this.uiCtx.restore();
     }
