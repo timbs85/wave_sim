@@ -56,14 +56,10 @@ class WaveSource {
         // Get the base source value from the signal
         const baseSourceValue = this.signal.getValue(dt);
 
-        if (baseSourceValue !== 0) {
-            // Use the source value directly without scaling
-            const sourceValue = baseSourceValue;
-            const sourceIdx = this.x + this.y * this.cols;
-            this._applySourcePressure(pressureField, sourceIdx, sourceValue);
-        } else {
-            this.isActive = false;
-        }
+        // Always apply source value if source is active
+        const sourceValue = baseSourceValue;
+        const sourceIdx = this.x + this.y * this.cols;
+        this._applySourcePressure(pressureField, sourceIdx, sourceValue);
     }
 
     _applySourcePressure(pressureField, sourceIdx, sourceValue) {

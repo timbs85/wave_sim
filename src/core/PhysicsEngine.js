@@ -62,9 +62,6 @@ class PhysicsEngine {
         // Reset pressure field
         this.pressureField.reset();
 
-        // Precalculate neighbor information
-        this.pressureField.precalculateNeighborInfo(this.geometry.getWalls());
-
         // Mark as initialized
         this.isInitialized = true;
 
@@ -134,9 +131,6 @@ class PhysicsEngine {
     async triggerImpulse() {
         // Reset pressure field
         this.pressureField.reset();
-
-        // Recalculate neighbor information
-        this.pressureField.precalculateNeighborInfo(this.geometry.getWalls());
 
         // Trigger the source
         this.source.trigger();

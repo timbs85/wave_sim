@@ -3,15 +3,25 @@ class PressureField {
         this.cols = cols;
         this.rows = rows;
         this.minPressureThreshold = minPressureThreshold;
-        this.disposed = false;  // Initialize disposal flag
         const gridSize = cols * rows;
 
-        // Store two time steps of pressure (current and previous)
+        // Basic two-step method storage
         this.pressureCurrent = new Float32Array(gridSize);
         this.pressurePrevious = new Float32Array(gridSize);
 
-        // Create neighbor indices array (5 indices per cell: center + 4 cardinal neighbors)
-        this.neighborIndices = new Int32Array(gridSize * 5);
+        // Energy tracking as per slides
+        this.energyAcoustic = 0;  // Ei: stored energy in acoustic field
+        this.energyWall = 0;      // Eb: stored energy at wall
+        this.powerLossWall = 0;   // Qb: power loss at wall
+        this.powerLossField = 0;  // Qi: power loss in acoustic field
+        this.inputPower = 0;      // P: input power
+
+        // Current frequency for viscothermal effects
+        this.frequency = 440;
+    }
+
+    setFrequency(freq) {
+        this.frequency = freq;
     }
 
     gridToIndex(x, y) {
@@ -19,21 +29,16 @@ class PressureField {
     }
 
     reset() {
-        // Ensure both pressure arrays are completely zeroed
         this.pressureCurrent.fill(0);
         this.pressurePrevious.fill(0);
     }
 
     dispose() {
-        // Clear all buffers
-        this.disposed = true;  // Add flag to track disposal
         this.pressureCurrent = null;
         this.pressurePrevious = null;
-        this.neighborIndices = null;
     }
 
     getPressure(x, y) {
-        // Already in grid coordinates, just check bounds and return pressure
         if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) {
             return this.pressureCurrent[this.gridToIndex(x, y)];
         }
@@ -41,87 +46,139 @@ class PressureField {
     }
 
     getVelocity(x, y) {
-        // Already in grid coordinates, calculate velocity using central differences
-        if (x >= 1 && x < this.cols - 1 && y >= 1 && y < this.rows - 1) {
+        // Simple central difference for velocity
+        if (x > 0 && x < this.cols - 1 && y > 0 && y < this.rows - 1) {
             const dx = (this.pressureCurrent[this.gridToIndex(x + 1, y)] -
-                this.pressureCurrent[this.gridToIndex(x - 1, y)]) * 0.5;
+                       this.pressureCurrent[this.gridToIndex(x - 1, y)]) / 2;
             const dy = (this.pressureCurrent[this.gridToIndex(x, y + 1)] -
-                this.pressureCurrent[this.gridToIndex(x, y - 1)]) * 0.5;
-
+                       this.pressureCurrent[this.gridToIndex(x, y - 1)]) / 2;
             return Math.sqrt(dx * dx + dy * dy);
         }
         return 0;
     }
 
-    precalculateNeighborInfo(walls) {
+    calculateEnergy(walls) {
+        this.energyAcoustic = 0;
+        this.energyWall = 0;
+
         for (let i = 1; i < this.cols - 1; i++) {
             for (let j = 1; j < this.rows - 1; j++) {
                 const idx = this.gridToIndex(i, j);
-                const baseIdx = idx * 5;
 
-                // Store center and neighbor indices
-                this.neighborIndices[baseIdx] = idx;
-                this.neighborIndices[baseIdx + 1] = this.gridToIndex(i - 1, j);      // Left
-                this.neighborIndices[baseIdx + 2] = this.gridToIndex(i + 1, j);      // Right
-                this.neighborIndices[baseIdx + 3] = this.gridToIndex(i, j - 1);      // Up
-                this.neighborIndices[baseIdx + 4] = this.gridToIndex(i, j + 1);      // Down
+                if (walls[idx] === 1) continue;
+
+                // Acoustic field energy
+                const p = this.pressureCurrent[idx];
+                const v = this.getVelocity(i, j);
+                this.energyAcoustic += 0.5 * (p * p + v * v);
+
+                // Wall energy (if adjacent to wall)
+                if (this.isAdjacentToWall(i, j, walls)) {
+                    this.energyWall += 0.5 * p * p;
+                }
             }
         }
     }
 
+    isAdjacentToWall(i, j, walls) {
+        if (i < 1 || i >= this.cols - 1 || j < 1 || j >= this.rows - 1) return false;
+
+        const leftIdx = this.gridToIndex(i - 1, j);
+        const rightIdx = this.gridToIndex(i + 1, j);
+        const upIdx = this.gridToIndex(i, j - 1);
+        const downIdx = this.gridToIndex(i, j + 1);
+
+        return walls[leftIdx] === 1 || walls[rightIdx] === 1 ||
+               walls[upIdx] === 1 || walls[downIdx] === 1;
+    }
+
     updatePressure(walls, dt, dx, c, rho, wallAbsorption, airAbsorption) {
-        // Calculate coefficient for the FDTD update
+        // Basic FDTD coefficients
         const courant = (c * dt / dx);
         const courantSquared = courant * courant;
+
+        // Viscothermal coefficient from Stokes equation
+        const alpha = 1.84e-5;  // Air viscosity at 20°C
+        const viscothermalCoeff = (alpha * dt) / c;
 
         // Create buffer for next time step
         const pressureNext = new Float32Array(this.pressureCurrent.length);
 
-        // Update interior points using normal wave equation
-        for (let j = 1; j < this.rows - 1; j++) {
-            for (let i = 1; i < this.cols - 1; i++) {
+        // Reset power tracking
+        this.powerLossWall = 0;
+        this.powerLossField = 0;
+
+        // Update interior points using basic two-step method
+        for (let i = 0; i < this.cols; i++) {
+            for (let j = 0; j < this.rows; j++) {
                 const idx = this.gridToIndex(i, j);
 
-                // Skip only regular walls (type 1), let anechoic walls (type 2) participate
+                // Skip wall cells
                 if (walls[idx] === 1) {
                     pressureNext[idx] = 0;
                     continue;
                 }
 
-                // Get neighbor indices
+                // Handle absorbing boundaries at simulation edges
+                if (i === 0 || i === this.cols - 1 || j === 0 || j === this.rows - 1) {
+                    // Use Mur's absorbing boundary condition
+                    const absorbingCoeff = 1.0; // No absorption
+                    if (i === 0) {
+                        pressureNext[idx] = this.pressureCurrent[idx + 1] * absorbingCoeff;
+                    } else if (i === this.cols - 1) {
+                        pressureNext[idx] = this.pressureCurrent[idx - 1] * absorbingCoeff;
+                    } else if (j === 0) {
+                        pressureNext[idx] = this.pressureCurrent[idx + this.cols] * absorbingCoeff;
+                    } else if (j === this.rows - 1) {
+                        pressureNext[idx] = this.pressureCurrent[idx - this.cols] * absorbingCoeff;
+                    }
+                    continue;
+                }
+
+                // Five-point stencil Laplacian (exactly as shown in slides)
                 const leftIdx = this.gridToIndex(i - 1, j);
                 const rightIdx = this.gridToIndex(i + 1, j);
                 const upIdx = this.gridToIndex(i, j - 1);
                 const downIdx = this.gridToIndex(i, j + 1);
 
-                // Normal wave equation
                 const laplacian = (
-                    this.pressureCurrent[rightIdx] +      // right
-                    this.pressureCurrent[leftIdx] +       // left
-                    this.pressureCurrent[downIdx] +       // down
-                    this.pressureCurrent[upIdx] -         // up
-                    4 * this.pressureCurrent[idx]         // center
+                    this.pressureCurrent[rightIdx] +
+                    this.pressureCurrent[leftIdx] +
+                    this.pressureCurrent[upIdx] +
+                    this.pressureCurrent[downIdx] -
+                    4 * this.pressureCurrent[idx]
                 );
 
+                // Basic wave equation update
                 pressureNext[idx] =
                     2 * this.pressureCurrent[idx] -
                     this.pressurePrevious[idx] +
                     courantSquared * laplacian;
 
-                // Apply regular wall absorption only for points next to regular walls
-                let nearRegularWall = false;
-                if (walls[leftIdx] === 1 || walls[rightIdx] === 1 ||
-                    walls[upIdx] === 1 || walls[downIdx] === 1) {
-                    nearRegularWall = true;
+                // Add viscothermal effects (Stokes equation term)
+                if (this.pressurePrevious[idx] !== 0) {
+                    const dtLaplacian = (laplacian - (
+                        this.pressurePrevious[rightIdx] +
+                        this.pressurePrevious[leftIdx] +
+                        this.pressurePrevious[upIdx] +
+                        this.pressurePrevious[downIdx] -
+                        4 * this.pressurePrevious[idx]
+                    )) / dt;
+
+                    pressureNext[idx] -= viscothermalCoeff * dtLaplacian;
                 }
 
-                if (nearRegularWall) {
-                    const beta = 1 - wallAbsorption;
-                    pressureNext[idx] *= beta;
+                // Handle wall losses (Qb)
+                if (this.isAdjacentToWall(i, j, walls)) {
+                    const pressureDiff = pressureNext[idx] - this.pressureCurrent[idx];
+                    pressureNext[idx] *= (1 - wallAbsorption);
+                    this.powerLossWall += wallAbsorption * pressureDiff * pressureDiff;
                 }
 
-                // Apply air absorption
-                pressureNext[idx] *= (1 - airAbsorption);
+                // Handle air losses (Qi)
+                const pressureDiff = pressureNext[idx] - this.pressureCurrent[idx];
+                pressureNext[idx] *= (1 - airAbsorption * 0.1); // Scale down the effect
+                this.powerLossField += airAbsorption * pressureDiff * pressureDiff;
 
                 // Clean up small values
                 if (Math.abs(pressureNext[idx]) < this.minPressureThreshold) {
@@ -130,55 +187,15 @@ class PressureField {
             }
         }
 
-        // Apply absorbing boundary conditions at grid edges where there are no regular walls
-        const absorbCoeff = (courant - 1) / (courant + 1);  // First-order absorbing coefficient
-
-        // Right boundary
-        for (let j = 1; j < this.rows - 1; j++) {
-            const i = this.cols - 1;
-            const idx = this.gridToIndex(i, j);
-            if (walls[idx] !== 1) {
-                const prevIdx = this.gridToIndex(i - 1, j);
-                pressureNext[idx] = this.pressureCurrent[prevIdx] +
-                    absorbCoeff * (pressureNext[prevIdx] - this.pressureCurrent[idx]);
-            }
-        }
-
-        // Left boundary
-        for (let j = 1; j < this.rows - 1; j++) {
-            const i = 0;
-            const idx = this.gridToIndex(i, j);
-            if (walls[idx] !== 1) {
-                const nextIdx = this.gridToIndex(i + 1, j);
-                pressureNext[idx] = this.pressureCurrent[nextIdx] +
-                    absorbCoeff * (pressureNext[nextIdx] - this.pressureCurrent[idx]);
-            }
-        }
-
-        // Bottom boundary
-        for (let i = 1; i < this.cols - 1; i++) {
-            const j = this.rows - 1;
-            const idx = this.gridToIndex(i, j);
-            if (walls[idx] !== 1) {
-                const prevIdx = this.gridToIndex(i, j - 1);
-                pressureNext[idx] = this.pressureCurrent[prevIdx] +
-                    absorbCoeff * (pressureNext[prevIdx] - this.pressureCurrent[idx]);
-            }
-        }
-
-        // Top boundary
-        for (let i = 1; i < this.cols - 1; i++) {
-            const j = 0;
-            const idx = this.gridToIndex(i, j);
-            if (walls[idx] !== 1) {
-                const nextIdx = this.gridToIndex(i, j + 1);
-                pressureNext[idx] = this.pressureCurrent[nextIdx] +
-                    absorbCoeff * (pressureNext[nextIdx] - this.pressureCurrent[idx]);
-            }
-        }
-
-        // Update time steps
+        // Update time steps (recursion as shown in slides)
         this.pressurePrevious.set(this.pressureCurrent);
         this.pressureCurrent.set(pressureNext);
     }
-} 
+
+    applyDamping(factor) {
+        for (let i = 0; i < this.pressureCurrent.length; i++) {
+            this.pressureCurrent[i] *= factor;
+            this.pressurePrevious[i] *= factor;
+        }
+    }
+}

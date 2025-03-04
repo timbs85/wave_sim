@@ -10,11 +10,11 @@ class WaveSimulation {
         // Store physics parameters
         this.setPhysicsParams(params.physics);
 
-        // Calculate derived values
+        // Calculate derived values (CFL condition)
         this.dx = params.room.physicalWidth / this.cols;
-        this.dt = this.dx / (this.c * Math.sqrt(2));
+        this.dt = this.dx / (this.c * Math.sqrt(2));  // Ensures stability
 
-        // Initialize components with only needed params
+        // Initialize components
         this.geometry = new RoomGeometry(
             this.cols,
             this.rows,
@@ -37,10 +37,16 @@ class WaveSimulation {
             y: Math.floor(this.rows * params.source.defaultY)
         });
 
-        // Medium properties
-        this.setMediumParams(params.controls, params.medium);
+        // Medium properties (direct values, no scaling)
+        this.wallAbsorption = params.controls.wallAbsorption / 100;
+        this.airAbsorption = (params.controls.airAbsorption / 100) * params.medium.maxAirAbsorption;
 
         this.isInitialized = false;
+
+        // Energy tracking
+        this.totalEnergy = 0;
+        this.lastEnergyCheck = 0;
+        this.energyCheckInterval = 10;
     }
 
     setPhysicsParams(physics) {
@@ -48,33 +54,16 @@ class WaveSimulation {
         this.rho = physics.density;
     }
 
-    setMediumParams(controls, medium) {
-        this.wallAbsorption = controls.wallAbsorption / 100;
-        this.airAbsorption = (controls.airAbsorption / 100) * medium.maxAirAbsorption;
-    }
-
     async initialize(frequency = window.params.source.defaultFrequency) {
-        // Set initial parameters
         this.source.setFrequency(frequency);
-
-        // Reset pressure field
         this.pressureField.reset();
-
-        // Recalculate neighbor information
-        this.pressureField.precalculateNeighborInfo(this.geometry.getWalls());
-
-        // Mark as initialized
         this.isInitialized = true;
-
-        // Trigger the source
         this.source.trigger();
-
-        // Return a resolved promise to ensure async completion
         return Promise.resolve();
     }
 
     update() {
-        // Update pressure and velocity fields
+        // Basic two-step recursion
         this.pressureField.updatePressure(
             this.geometry.getWalls(),
             this.dt,
@@ -85,10 +74,41 @@ class WaveSimulation {
             this.airAbsorption
         );
 
-        // Update source
+        // Update source and track power
         if (this.source.isActive) {
             this.source.updateSource(this.pressureField, this.dt);
+            this.pressureField.inputPower = this.source.getCurrentPower();
+        } else {
+            this.pressureField.inputPower = 0;
         }
+
+        // Energy balance check
+        this.lastEnergyCheck++;
+        if (this.lastEnergyCheck >= this.energyCheckInterval) {
+            this.checkEnergyBalance();
+            this.lastEnergyCheck = 0;
+        }
+    }
+
+    checkEnergyBalance() {
+        // Calculate total energy
+        this.pressureField.calculateEnergy(this.geometry.getWalls());
+        const newEnergy = this.pressureField.energyAcoustic + this.pressureField.energyWall;
+
+        // Check energy balance equation from slides
+        const energyChange = newEnergy - this.totalEnergy;
+        const powerBalance = this.pressureField.inputPower -
+                           this.pressureField.powerLossWall -
+                           this.pressureField.powerLossField;
+
+        // Apply damping if energy increases against power balance
+        if (energyChange > powerBalance * this.dt * this.energyCheckInterval) {
+            const dampingFactor = Math.max(0.95,
+                1.0 - (energyChange - powerBalance * this.dt * this.energyCheckInterval) / newEnergy);
+            this.pressureField.applyDamping(dampingFactor);
+        }
+
+        this.totalEnergy = newEnergy;
     }
 
     setSource(gridX, gridY) {
@@ -97,6 +117,7 @@ class WaveSimulation {
 
     setFrequency(freq) {
         this.source.setFrequency(freq);
+        this.pressureField.setFrequency(freq);
         if (this.isInitialized) {
             this.triggerImpulse();
         }

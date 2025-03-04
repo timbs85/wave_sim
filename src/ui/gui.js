@@ -210,8 +210,8 @@ class GUI {
         }, (value) => {
             if (this.simulationApp.physicsEngine) {
                 // Convert percentage to actual value
-                const absValue = (value / 100) * this.params.medium.maxAirAbsorption;
-                this.simulationApp.physicsEngine.setAirAbsorption(absValue);
+                const absValue = value / 100;
+                this.simulationApp.physicsEngine.setAirAbsorption(absValue, this.params.medium.maxAirAbsorption);
             }
         });
 
@@ -277,8 +277,7 @@ class GUI {
 
             // Update cell count if simulation is available
             if (this.simulationApp && this.simulationApp.physicsEngine) {
-                const cellCount = this.simulationApp.physicsEngine.grid ?
-                    this.simulationApp.physicsEngine.grid.width * this.simulationApp.physicsEngine.grid.height : 0;
+                const cellCount = this.simulationApp.physicsEngine.cols * this.simulationApp.physicsEngine.rows;
                 this.performanceStats.cells = `${cellCount.toLocaleString()} cells`;
             }
         }
